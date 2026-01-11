@@ -66,11 +66,6 @@
   document.getElementById("client_timestamp_ms").value = Date.now();
 
   {% if part.time_event_type == "end_time" %}
-  // QR scanner via CDN library
-  // Note: For a fully offline version later, vendor this library into /static/js
-  const script = document.createElement('script');
-  script.src = "https://unpkg.com/html5-qrcode@2.3.10/html5-qrcode.min.js";
-  document.head.appendChild(script);
 
   let qr;
   function onScanSuccess(decodedText, decodedResult) {
@@ -86,7 +81,10 @@
   }
 
   async function startScan() {
-    if (!window.Html5Qrcode) return;
+    if (!window.Html5Qrcode) {
+      alert("html5-qrcode did not load. Are you offline, behind a blocker, or is cdnjs blocked?");
+      return;
+    }
     qr = new Html5Qrcode("qr-reader");
     const config = { fps: 10, qrbox: { width: 250, height: 250 } };
     await qr.start({ facingMode: "environment" }, config, onScanSuccess);

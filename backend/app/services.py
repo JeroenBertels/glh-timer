@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, date, time, timedelta, timezone
+from zoneinfo import ZoneInfo
 import re
 from typing import Optional
 
@@ -152,7 +153,9 @@ def create_timing_event(session: Session, payload: TimingEventCreate) -> None:
         ev.duration_seconds = _parse_hms_to_seconds(payload.duration)
     elif part.time_event_type == "end_time":
         # server time
-        ev.end_time_utc = datetime.now(timezone.utc).replace(tzinfo=None)
+        race = get_race(session, payload.race_id)
+        tz_name = (race.race_timezone if race else "UTC")
+        ev.end_time_utc = datetime.now(ZoneInfo(tz_name)).replace(tzinfo=None)
         if payload.client_timestamp_ms:
             try:
                 ev.client_timestamp_ms = int(payload.client_timestamp_ms)

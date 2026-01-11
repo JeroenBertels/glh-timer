@@ -11,8 +11,7 @@
       {% if part.time_event_type != "overall" %}
         <a class="btn btn-primary" href="/admin/races/{{ race.race_id }}/parts/{{ part.race_part_id }}/timing/new">Submit timing event</a>
       {% endif %}
-      <a class="btn btn-outline-primary" href="/admin/races/{{ race.race_id }}/participants/new">Add participant</a>
-      {% if part.time_event_type == "end_time" %}
+{% if part.time_event_type == "end_time" %}
         <a class="btn btn-outline-secondary" href="/admin/races/{{ race.race_id }}/parts/{{ part.race_part_id }}/start-times">Set start times</a>
       {% endif %}
     </div>
@@ -36,7 +35,6 @@
 
 <div class="d-flex gap-2 mb-3 flex-wrap">
   <a class="btn btn-outline-secondary btn-sm" href="/api/participants.csv?race_id={{ race.race_id }}">Download participants CSV</a>
-  <a class="btn btn-outline-secondary btn-sm" href="/api/timing-events.csv?race_id={{ race.race_id }}">Download timing events CSV</a>
 </div>
 
 <div class="card shadow-sm">
