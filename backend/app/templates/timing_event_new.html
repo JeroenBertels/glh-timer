@@ -1,0 +1,110 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="mb-3">
+  <div class="text-muted"><a href="/races/{{ race.race_id }}/parts/{{ part.race_part_id }}">← Back</a></div>
+  <h1 class="h3 m-0">Submit timing event</h1>
+  <div class="text-muted">{{ race.race_id }} • {{ part.name }} • Type: {{ part.time_event_type }}</div>
+</div>
+
+<div class="row g-3">
+  <div class="col-12 col-lg-6">
+    <div class="card shadow-sm">
+      <div class="card-body">
+        <form method="post" id="timing-form">
+          <div class="mb-3">
+            <label class="form-label">Bib number</label>
+            <input class="form-control form-control-lg" name="participant_id" id="participant_id" inputmode="numeric" autofocus required>
+            <div class="form-text">Tip: on phones, scan QR below to fill this automatically.</div>
+          </div>
+
+          {% if part.time_event_type == "duration" %}
+            <div class="mb-3">
+              <label class="form-label">Duration</label>
+              <input class="form-control form-control-lg" name="duration" id="duration" placeholder="MM:SS or HH:MM:SS or seconds" required>
+            </div>
+          {% else %}
+            <input type="hidden" name="duration" value="">
+          {% endif %}
+
+          <input type="hidden" name="client_timestamp_ms" id="client_timestamp_ms" value="">
+
+          <button class="btn btn-primary btn-lg w-100" type="submit">
+            {% if part.time_event_type == "end_time" %}Submit finish{% else %}Submit duration{% endif %}
+          </button>
+
+          <div class="small text-muted mt-2">
+            For end-time mode, the server stores the submit time as finish time.
+            If two organizers scan the same bib, the earliest finish counts in results.
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  {% if part.time_event_type == "end_time" %}
+  <div class="col-12 col-lg-6">
+    <div class="card shadow-sm">
+      <div class="card-body">
+        <h2 class="h5">QR scanner (optional)</h2>
+        <p class="text-muted small">Allow camera access, then scan the bib QR. It will auto-submit and stay ready for the next scan.</p>
+
+        <div id="qr-reader" style="width: 100%;"></div>
+        <div class="mt-2 d-flex gap-2 flex-wrap">
+          <button class="btn btn-outline-primary btn-sm" id="start-scan" type="button">Start scanning</button>
+          <button class="btn btn-outline-secondary btn-sm" id="stop-scan" type="button" disabled>Stop</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  // Always store client-side timestamp as a backup (server time is the source of truth)
+  document.getElementById("client_timestamp_ms").value = Date.now();
+
+  {% if part.time_event_type == "end_time" %}
+  // QR scanner via CDN library
+  // Note: For a fully offline version later, vendor this library into /static/js
+  const script = document.createElement('script');
+  script.src = "https://unpkg.com/html5-qrcode@2.3.10/html5-qrcode.min.js";
+  document.head.appendChild(script);
+
+  let qr;
+  function onScanSuccess(decodedText, decodedResult) {
+    // Expect QR to contain bib number (digits); take first numeric chunk
+    const m = decodedText.match(/\d+/);
+    if (!m) return;
+    const bib = m[0];
+    const bibInput = document.getElementById("participant_id");
+    bibInput.value = bib;
+    // submit immediately
+    document.getElementById("client_timestamp_ms").value = Date.now();
+    document.getElementById("timing-form").submit();
+  }
+
+  async function startScan() {
+    if (!window.Html5Qrcode) return;
+    qr = new Html5Qrcode("qr-reader");
+    const config = { fps: 10, qrbox: { width: 250, height: 250 } };
+    await qr.start({ facingMode: "environment" }, config, onScanSuccess);
+    document.getElementById("start-scan").disabled = true;
+    document.getElementById("stop-scan").disabled = false;
+  }
+
+  async function stopScan() {
+    if (!qr) return;
+    await qr.stop();
+    await qr.clear();
+    qr = null;
+    document.getElementById("start-scan").disabled = false;
+    document.getElementById("stop-scan").disabled = true;
+  }
+
+  document.getElementById("start-scan").addEventListener("click", startScan);
+  document.getElementById("stop-scan").addEventListener("click", stopScan);
+  {% endif %}
+</script>
+{% endblock %}

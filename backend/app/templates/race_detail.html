@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="d-flex align-items-center justify-content-between mb-3">
+  <div>
+    <h1 class="h3 m-0">{{ race.race_id }}</h1>
+    <div class="text-muted">{{ race.race_date.isoformat() }} • {{ race.race_timezone }}</div>
+  </div>
+  {% if admin %}
+    <a class="btn btn-primary" href="/admin/races/{{ race.race_id }}/parts/new">Add race part</a>
+  {% endif %}
+</div>
+
+<div class="d-flex gap-2 mb-3 flex-wrap">
+  <a class="btn btn-outline-secondary btn-sm" href="/api/race-parts.csv?race_id={{ race.race_id }}">Download race parts CSV</a>
+  <a class="btn btn-outline-secondary btn-sm" href="/api/participants.csv?race_id={{ race.race_id }}">Download participants CSV</a>
+  <a class="btn btn-outline-secondary btn-sm" href="/api/timing-events.csv?race_id={{ race.race_id }}">Download timing events CSV</a>
+  {% if admin %}
+    <a class="btn btn-outline-primary btn-sm" href="/admin/races/{{ race.race_id }}/participants/new">Add participant</a>
+  {% endif %}
+</div>
+
+<h2 class="h5 mt-4">Race parts</h2>
+<div class="list-group shadow-sm">
+  {% for p in parts %}
+    <a class="list-group-item list-group-item-action" href="/races/{{ race.race_id }}/parts/{{ p.race_part_id }}">
+      <div class="d-flex justify-content-between align-items-center">
+        <div>
+          <div class="fw-semibold">{{ p.name }}</div>
+          <div class="small text-muted">ID: {{ p.race_part_id }} • Type: {{ p.time_event_type }}</div>
+        </div>
+        <span class="badge text-bg-secondary">{{ p.time_event_type }}</span>
+      </div>
+    </a>
+  {% endfor %}
+</div>
+{% endblock %}

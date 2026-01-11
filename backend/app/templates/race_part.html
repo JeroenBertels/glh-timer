@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="d-flex align-items-start justify-content-between gap-3 flex-wrap mb-3">
+  <div>
+    <div class="text-muted"><a href="/races/{{ race.race_id }}">← Back</a></div>
+    <h1 class="h3 m-0">{{ part.name }}</h1>
+    <div class="text-muted">Race: {{ race.race_id }} • Part ID: {{ part.race_part_id }} • Type: {{ part.time_event_type }}</div>
+  </div>
+  {% if admin %}
+    <div class="d-flex gap-2 flex-wrap">
+      {% if part.time_event_type != "overall" %}
+        <a class="btn btn-primary" href="/admin/races/{{ race.race_id }}/parts/{{ part.race_part_id }}/timing/new">Submit timing event</a>
+      {% endif %}
+      <a class="btn btn-outline-primary" href="/admin/races/{{ race.race_id }}/participants/new">Add participant</a>
+      {% if part.time_event_type == "end_time" %}
+        <a class="btn btn-outline-secondary" href="/admin/races/{{ race.race_id }}/parts/{{ part.race_part_id }}/start-times">Set start times</a>
+      {% endif %}
+    </div>
+  {% endif %}
+</div>
+
+{% if part.time_event_type == "end_time" %}
+  <div class="alert alert-info">
+    <div class="fw-semibold">End-time mode</div>
+    <div class="small">Durations are computed as <code>end_time - start_time</code>. Set a <code>DEFAULT</code> start time (or per-group start times) to get results.</div>
+    {% if start_times %}
+      <div class="small mt-2">
+        <span class="fw-semibold">Configured start times:</span>
+        {% for st in start_times %}
+          <span class="badge text-bg-light border">{{ st.group_name }} = {{ st.start_time_hms }}</span>
+        {% endfor %}
+      </div>
+    {% endif %}
+  </div>
+{% endif %}
+
+<div class="d-flex gap-2 mb-3 flex-wrap">
+  <a class="btn btn-outline-secondary btn-sm" href="/api/participants.csv?race_id={{ race.race_id }}">Download participants CSV</a>
+  <a class="btn btn-outline-secondary btn-sm" href="/api/timing-events.csv?race_id={{ race.race_id }}">Download timing events CSV</a>
+</div>
+
+<div class="card shadow-sm">
+  <div class="card-body">
+    <div class="d-flex align-items-center justify-content-between mb-2">
+      <div class="fw-semibold">Results</div>
+      <div class="small text-muted">Auto-refresh every {{ (poll_ms/1000)|int }}s</div>
+    </div>
+    <div class="table-responsive">
+      <table class="table table-sm align-middle" id="results-table">
+        {% include "partials/results_table.html" %}
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  const pollMs = {{ poll_ms }};
+  const url = "/api/races/{{ race.race_id }}/parts/{{ part.race_part_id }}/results/partial";
+  setInterval(async () => {
+    try {
+      const res = await fetch(url, {cache: "no-store"});
+      const html = await res.text();
+      document.querySelector("#results-table").innerHTML = html;
+    } catch (e) {
+      console.warn("poll failed", e);
+    }
+  }, pollMs);
+</script>
+{% endblock %}

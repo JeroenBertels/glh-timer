@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block content %}
+<h1 class="h3 mb-3">Add participant</h1>
+<div class="card shadow-sm" style="max-width: 860px;">
+  <div class="card-body">
+    <form method="post">
+      <div class="row g-3">
+        <div class="col-12 col-md-4">
+          <label class="form-label">Bib / Participant ID</label>
+          <input class="form-control" name="participant_id" required>
+        </div>
+        <div class="col-12 col-md-4">
+          <label class="form-label">First name</label>
+          <input class="form-control" name="firstname" required>
+        </div>
+        <div class="col-12 col-md-4">
+          <label class="form-label">Last name</label>
+          <input class="form-control" name="lastname" required>
+        </div>
+        <div class="col-6 col-md-2">
+          <label class="form-label">Sex</label>
+          <input class="form-control" name="sex" placeholder="M/F">
+        </div>
+        <div class="col-6 col-md-3">
+          <label class="form-label">Group</label>
+          <input class="form-control" name="group_name" placeholder="M10, F12, Open, ...">
+        </div>
+        <div class="col-12 col-md-7">
+          <label class="form-label">Club</label>
+          <input class="form-control" name="club_name">
+        </div>
+      </div>
+      <div class="mt-3">
+        <button class="btn btn-primary" type="submit">Add participant</button>
+        <a class="btn btn-link" href="/races/{{ race_id }}">Back</a>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

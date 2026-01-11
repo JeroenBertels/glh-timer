@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="mb-3">
+  <div class="text-muted"><a href="/races/{{ race.race_id }}/parts/{{ part.race_part_id }}">← Back</a></div>
+  <h1 class="h3 m-0">Start times</h1>
+  <div class="text-muted">{{ race.race_id }} • {{ part.name }}</div>
+</div>
+
+<div class="alert alert-warning">
+  <div class="fw-semibold">How this works</div>
+  <div class="small">
+    Set a start time per group (e.g. M10, F12, Open) for this race part.
+    If no group-specific start time is found, the app uses <code>DEFAULT</code>.
+  </div>
+</div>
+
+<div class="row g-3">
+  <div class="col-12 col-lg-6">
+    <div class="card shadow-sm">
+      <div class="card-body">
+        <h2 class="h5">Add / update start time</h2>
+        <form method="post">
+          <div class="mb-3">
+            <label class="form-label">Group name</label>
+            <input class="form-control" name="group_name" placeholder="DEFAULT or M10 or Open" required>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Start time (HH:MM:SS)</label>
+            <input class="form-control" name="start_time_hms" placeholder="10:00:00" required>
+          </div>
+          <button class="btn btn-primary" type="submit">Save</button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-12 col-lg-6">
+    <div class="card shadow-sm">
+      <div class="card-body">
+        <h2 class="h5">Current start times</h2>
+        <div class="table-responsive">
+          <table class="table table-sm">
+            <thead><tr><th>Group</th><th>Start time</th></tr></thead>
+            <tbody>
+            {% for r in rows %}
+              <tr><td>{{ r.group_name }}</td><td class="font-monospace">{{ r.start_time_hms }}</td></tr>
+            {% else %}
+              <tr><td colspan="2" class="text-muted">No start times set.</td></tr>
+            {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        <div class="small text-muted">Tip: set DEFAULT first.</div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

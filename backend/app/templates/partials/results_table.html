@@ -1,0 +1,28 @@
+<thead>
+  <tr>
+    <th>Rank</th>
+    <th>Bib</th>
+    <th>Name</th>
+    <th>Group</th>
+    <th>Club</th>
+    <th>Sex</th>
+    <th>Time</th>
+    <th>Note</th>
+  </tr>
+</thead>
+<tbody>
+  {% for r in results %}
+    <tr>
+      <td class="text-muted">{{ loop.index }}</td>
+      <td class="fw-semibold">{{ r.bib }}</td>
+      <td>{{ r.name }}</td>
+      <td>{{ r.group }}</td>
+      <td>{{ r.club }}</td>
+      <td>{{ r.sex }}</td>
+      <td class="font-monospace">{{ r.duration_str if r.duration_str else "—" }}</td>
+      <td class="small text-muted">{{ r.note }}</td>
+    </tr>
+  {% else %}
+    <tr><td colspan="8" class="text-muted">No participants yet.</td></tr>
+  {% endfor %}
+</tbody>

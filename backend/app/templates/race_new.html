@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block content %}
+<h1 class="h3 mb-3">Add race</h1>
+<div class="card shadow-sm" style="max-width: 720px;">
+  <div class="card-body">
+    <form method="post">
+      <div class="mb-3">
+        <label class="form-label">Race ID</label>
+        <input class="form-control" name="race_id" placeholder="GLH Swim-Run 2026" required>
+      </div>
+      <div class="mb-3">
+        <label class="form-label">Race date</label>
+        <input class="form-control" name="race_date" type="date" required>
+      </div>
+      <div class="mb-3">
+        <label class="form-label">Race timezone</label>
+        <input class="form-control" name="race_timezone" value="{{ tz_default }}" required>
+        <div class="form-text">Example: Europe/Brussels</div>
+      </div>
+      <button class="btn btn-primary" type="submit">Create race</button>
+      <a class="btn btn-link" href="/races">Cancel</a>
+    </form>
+  </div>
+</div>
+{% endblock %}
