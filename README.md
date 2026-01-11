@@ -125,3 +125,21 @@ backend/
 
 ## License
 MIT (feel free to modify for your club)
+
+
+## QR code printing (PDF)
+
+Generate a printable A4 PDF with QR codes + big bib numbers:
+
+```bash
+cd backend
+source .venv/bin/activate
+python make_qr_pdf.py --start 1 --end 200 --out bib_qr.pdf
+```
+
+Then print `bib_qr.pdf` and cut/tape labels to bibs.
+You can tweak the grid/layout, e.g.:
+
+```bash
+python make_qr_pdf.py --start 1 --end 120 --cols 4 --rows 6 --size-mm 45 --qr-mm 33 --out labels.pdf
+```

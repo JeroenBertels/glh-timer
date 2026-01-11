@@ -136,7 +136,18 @@ def create_timing_event(session: Session, payload: TimingEventCreate) -> None:
         select(models.Participant).where(and_(models.Participant.race_id == payload.race_id, models.Participant.participant_id == payload.participant_id))
     ).scalar_one_or_none()
     if not participant:
-        raise ValueError("Participant not found for this race")
+    # Auto-create placeholder participant so we never lose a timing event.
+        participant = models.Participant(
+            race_id=payload.race_id,
+            participant_id=payload.participant_id,
+            firstname="Unknown",
+            lastname=f"Unknown {payload.participant_id}",
+            sex="",
+            group_name="",
+            club_name="",
+        )
+        session.add(participant)
+        session.flush()
 
     ev = models.TimingEvent(
         race_id=payload.race_id,
@@ -173,6 +184,11 @@ def upsert_start_time(session: Session, payload: StartTimeUpsert) -> None:
         raise ValueError("Start times are only used for end-time race parts")
 
     group = (payload.group_name or "DEFAULT").strip() or "DEFAULT"
+    race = get_race(session, payload.race_id)
+    tz_name = (race.race_timezone if race else "UTC")
+    start_time_hms_upper = (payload.start_time_hms or "").strip().upper()
+    if start_time_hms_upper == "NOW":
+        payload.start_time_hms = datetime.now(ZoneInfo(tz_name)).strftime("%H:%M:%S")
     existing = session.execute(
         select(models.RacePartStartTime).where(
             and_(
@@ -382,3 +398,50 @@ def _best_durations_for_part(session: Session, race: models.Race, part: models.R
         else:
             out[participant.participant_id] = None
     return out
+
+
+def import_participants_csv(session: Session, race_id: str, csv_text: str) -> tuple[int, int]:
+    """Import participants for a race from CSV text. Returns (added, skipped)."""
+    import csv as _csv
+    from io import StringIO
+    reader = _csv.DictReader(StringIO(csv_text))
+    added = 0
+    skipped = 0
+
+    for row in reader:
+        pid = (row.get("participant_id") or row.get("bib") or row.get("bib_number") or "").strip()
+        firstname = (row.get("firstname") or row.get("first_name") or row.get("voornaam") or "").strip()
+        lastname = (row.get("lastname") or row.get("last_name") or row.get("achternaam") or "").strip()
+        if not pid:
+            skipped += 1
+            continue
+        if not firstname:
+            firstname = "Unknown"
+        if not lastname:
+            lastname = f"Unknown {pid}"
+
+        sex = (row.get("sex") or row.get("m/f") or row.get("gender") or "").strip()
+        group_name = (row.get("group_name") or row.get("group") or row.get("cat") or "").strip()
+        club_name = (row.get("club_name") or row.get("club") or "").strip()
+
+        existing = session.execute(
+            select(models.Participant).where(and_(models.Participant.race_id == race_id, models.Participant.participant_id == pid))
+        ).scalar_one_or_none()
+        if existing:
+            skipped += 1
+            continue
+
+        p = models.Participant(
+            race_id=race_id,
+            participant_id=pid,
+            firstname=firstname,
+            lastname=lastname,
+            sex=sex,
+            group_name=group_name,
+            club_name=club_name,
+        )
+        session.add(p)
+        added += 1
+
+    session.commit()
+    return added, skipped

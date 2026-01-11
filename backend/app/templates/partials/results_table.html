@@ -12,7 +12,7 @@
 </thead>
 <tbody>
   {% for r in results %}
-    <tr>
+    <tr data-sex="{{ (r.sex or '')|lower }}" data-group="{{ (r.group or '')|lower }}">
       <td class="text-muted">{{ loop.index }}</td>
       <td class="fw-semibold">{{ r.bib }}</td>
       <td>{{ r.name }}</td>
@@ -23,6 +23,6 @@
       <td class="small text-muted">{{ r.note }}</td>
     </tr>
   {% else %}
-    <tr><td colspan="8" class="text-muted">No participants yet.</td></tr>
+    <tr data-sex="{{ r.sex|lower }}" data-group="{{ r.group|lower }}"><td colspan="8" class="text-muted">No participants yet.</td></tr>
   {% endfor %}
 </tbody>

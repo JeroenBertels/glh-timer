@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Request, Depends, Form, HTTPException
+from fastapi import FastAPI, Request, Depends, Form, HTTPException, UploadFile, File
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -208,6 +208,7 @@ def new_timing_form(race_id: str, race_part_id: str, request: Request, session=D
 
 @app.post("/admin/races/{race_id}/parts/{race_part_id}/timing/new", dependencies=[Depends(admin_required)])
 def new_timing_submit(
+    request: Request,
     race_id: str,
     race_part_id: str,
     participant_id: str = Form(...),
@@ -225,8 +226,32 @@ def new_timing_submit(
             client_timestamp_ms=client_timestamp_ms.strip() or None,
         ),
     )
+    if request.headers.get("X-Requested-With") == "fetch":
+        from fastapi.responses import JSONResponse
+        return JSONResponse({"ok": True})
     return RedirectResponse(url=f"/races/{race_id}/parts/{race_part_id}", status_code=302)
 
+
+
+@app.get("/admin/races/{race_id}/participants/upload", response_class=HTMLResponse, dependencies=[Depends(admin_required)])
+def upload_participants_form(race_id: str, request: Request, session=Depends(get_session)):
+    race = services.get_race(session, race_id)
+    if not race:
+        raise HTTPException(status_code=404, detail="Race not found")
+    return templates.TemplateResponse("participants_upload.html", {"request": request, "race": race, "error": None, "msg": None})
+
+@app.post("/admin/races/{race_id}/participants/upload", response_class=HTMLResponse, dependencies=[Depends(admin_required)])
+async def upload_participants_submit(race_id: str, request: Request, file: UploadFile = File(...), session=Depends(get_session)):
+    race = services.get_race(session, race_id)
+    if not race:
+        raise HTTPException(status_code=404, detail="Race not found")
+    try:
+        content = (await file.read()).decode("utf-8-sig")
+        added, skipped = services.import_participants_csv(session, race_id, content)
+        msg = f"Imported {added} participants. Skipped {skipped} rows."
+        return templates.TemplateResponse("participants_upload.html", {"request": request, "race": race, "error": None, "msg": msg})
+    except Exception as e:
+        return templates.TemplateResponse("participants_upload.html", {"request": request, "race": race, "error": str(e), "msg": None}, status_code=400)
 @app.get(
     "/admin/races/{race_id}/parts/{race_part_id}/start-times",
     response_class=HTMLResponse,

@@ -53,6 +53,7 @@
           <button class="btn btn-outline-primary btn-sm" id="start-scan" type="button">Start scanning</button>
           <button class="btn btn-outline-secondary btn-sm" id="stop-scan" type="button" disabled>Stop</button>
         </div>
+        <div id="scan-status" class="mt-3 small"></div>
       </div>
     </div>
   </div>
@@ -60,24 +61,91 @@
 </div>
 {% endblock %}
 
+\
 {% block scripts %}
 <script>
   // Always store client-side timestamp as a backup (server time is the source of truth)
   document.getElementById("client_timestamp_ms").value = Date.now();
 
   {% if part.time_event_type == "end_time" %}
-
   let qr;
+  let lastBib = null;
+  let lastScanAt = 0;
+
+  const statusEl = document.getElementById("scan-status");
+function beepSuccess() {
+  try {
+    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+    if (!AudioCtx) return;
+    const ctx = new AudioCtx();
+    const o = ctx.createOscillator();
+    const g = ctx.createGain();
+    o.type = "sine";
+    o.frequency.value = 880; // A5-ish
+    g.gain.value = 0.05;
+    o.connect(g);
+    g.connect(ctx.destination);
+    o.start();
+    setTimeout(() => { o.stop(); ctx.close(); }, 120);
+  } catch (e) { /* ignore */ }
+}
+
+function vibrateSuccess() {
+  try {
+    if (navigator.vibrate) navigator.vibrate([60, 30, 60]);
+  } catch (e) { /* ignore */ }
+}
+
+function setStatus(msg, kind) {
+    if (!statusEl) return;
+    const cls = kind === "ok" ? "text-success" : (kind === "warn" ? "text-warning" : "text-danger");
+    statusEl.className = "mt-3 small " + cls;
+    statusEl.textContent = msg;
+  }
+
+  async function submitBibBackground(bib) {
+    const url = window.location.pathname;
+    const fd = new FormData();
+    fd.set("participant_id", bib);
+    fd.set("duration", "");
+    fd.set("client_timestamp_ms", String(Date.now()));
+
+    const res = await fetch(url, {
+      method: "POST",
+      body: fd,
+      headers: { "X-Requested-With": "fetch" },
+      redirect: "manual",
+      cache: "no-store",
+      credentials: "same-origin",
+    });
+
+    if (!res.ok) {
+      const t = await res.text();
+      throw new Error(t || ("HTTP " + res.status));
+    }
+    return true;
+  }
+
   function onScanSuccess(decodedText, decodedResult) {
-    // Expect QR to contain bib number (digits); take first numeric chunk
     const m = decodedText.match(/\d+/);
     if (!m) return;
     const bib = m[0];
-    const bibInput = document.getElementById("participant_id");
-    bibInput.value = bib;
-    // submit immediately
-    document.getElementById("client_timestamp_ms").value = Date.now();
-    document.getElementById("timing-form").submit();
+
+    const now = Date.now();
+    if (bib === lastBib && (now - lastScanAt) < 2000) return;
+    lastBib = bib;
+    lastScanAt = now;
+
+    setStatus(`Submitting bib ${bib}…`, "warn");
+
+    submitBibBackground(bib).then(() => {
+      setStatus(`✅ Submitted bib ${bib}`, "ok");
+      beepSuccess();
+      vibrateSuccess();
+    }).catch((e) => {
+      console.warn(e);
+      setStatus(`❌ Failed to submit bib ${bib}: ${e.message}`, "err");
+    });
   }
 
   async function startScan() {
@@ -90,6 +158,7 @@
     await qr.start({ facingMode: "environment" }, config, onScanSuccess);
     document.getElementById("start-scan").disabled = true;
     document.getElementById("stop-scan").disabled = false;
+    setStatus("Camera started. Scan bib QR codes.", "ok");
   }
 
   async function stopScan() {
@@ -99,6 +168,7 @@
     qr = null;
     document.getElementById("start-scan").disabled = false;
     document.getElementById("stop-scan").disabled = true;
+    setStatus("Camera stopped.", "warn");
   }
 
   document.getElementById("start-scan").addEventListener("click", startScan);
@@ -106,3 +176,4 @@
   {% endif %}
 </script>
 {% endblock %}
+

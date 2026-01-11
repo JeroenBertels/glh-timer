@@ -37,6 +37,38 @@
   <a class="btn btn-outline-secondary btn-sm" href="/api/participants.csv?race_id={{ race.race_id }}">Download participants CSV</a>
 </div>
 
+<div class="card shadow-sm mb-3">
+  <div class="card-body">
+    <div class="row g-2 align-items-end">
+      <div class="col-12 col-md-4">
+        <label class="form-label small">Filter by sex</label>
+        <select class="form-select form-select-sm" id="filter-sex">
+          <option value="">All</option>
+          {% for v in (results | map(attribute='sex') | list) | unique %}
+            {% if v %}
+              <option value="{{ v|lower }}">{{ v }}</option>
+            {% endif %}
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-12 col-md-4">
+        <label class="form-label small">Filter by group</label>
+        <select class="form-select form-select-sm" id="filter-group">
+          <option value="">All</option>
+          {% for v in (results | map(attribute='group') | list) | unique %}
+            {% if v %}
+              <option value="{{ v|lower }}">{{ v }}</option>
+            {% endif %}
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-12 col-md-4">
+        <button class="btn btn-outline-secondary btn-sm" id="clear-filters" type="button">Clear filters</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <div class="card shadow-sm">
   <div class="card-body">
     <div class="d-flex align-items-center justify-content-between mb-2">
@@ -56,11 +88,35 @@
 <script>
   const pollMs = {{ poll_ms }};
   const url = "/api/races/{{ race.race_id }}/parts/{{ part.race_part_id }}/results/partial";
+
+  function applyFilters() {
+    const sex = (document.getElementById('filter-sex')?.value || '').toLowerCase();
+    const grp = (document.getElementById('filter-group')?.value || '').toLowerCase();
+    document.querySelectorAll('#results-table tbody tr').forEach(tr => {
+      const s = (tr.getAttribute('data-sex') || '');
+      const g = (tr.getAttribute('data-group') || '');
+      const okSex = !sex || s === sex;
+      const okGrp = !grp || g === grp;
+      tr.style.display = (okSex && okGrp) ? '' : 'none';
+    });
+  }
+
+  document.getElementById('filter-sex')?.addEventListener('change', applyFilters);
+  document.getElementById('filter-group')?.addEventListener('change', applyFilters);
+  document.getElementById('clear-filters')?.addEventListener('click', () => {
+    document.getElementById('filter-sex').value = '';
+    document.getElementById('filter-group').value = '';
+    applyFilters();
+  });
+
+  applyFilters();
+
   setInterval(async () => {
     try {
       const res = await fetch(url, {cache: "no-store"});
       const html = await res.text();
       document.querySelector("#results-table").innerHTML = html;
+      applyFilters();
     } catch (e) {
       console.warn("poll failed", e);
     }
