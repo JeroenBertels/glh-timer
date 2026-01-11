@@ -8,6 +8,7 @@
   </div>
   {% if admin %}
     <div class="d-flex gap-2 flex-wrap">
+      <a class="btn btn-outline-secondary" href="/api/results.csv?race_id={{ race.race_id }}&race_part_id={{ part.race_part_id }}">Download results CSV</a>
       {% if part.time_event_type != "overall" %}
         <a class="btn btn-primary" href="/admin/races/{{ race.race_id }}/parts/{{ part.race_part_id }}/timing/new">Submit timing event</a>
       {% endif %}

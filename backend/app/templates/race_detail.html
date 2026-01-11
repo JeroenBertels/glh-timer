@@ -11,9 +11,11 @@
 </div>
 
 <div class="d-flex gap-2 mb-3 flex-wrap">
-  <a class="btn btn-outline-secondary btn-sm" href="/api/race-parts.csv?race_id={{ race.race_id }}">Download race parts CSV</a>
-  <a class="btn btn-outline-secondary btn-sm" href="/api/participants.csv?race_id={{ race.race_id }}">Download participants CSV</a>
-  <a class="btn btn-outline-secondary btn-sm" href="/api/timing-events.csv?race_id={{ race.race_id }}">Download timing events CSV</a>
+  {% if admin %}
+    <a class="btn btn-outline-secondary btn-sm" href="/api/race-parts.csv?race_id={{ race.race_id }}">Download race parts CSV</a>
+    <a class="btn btn-outline-secondary btn-sm" href="/api/participants.csv?race_id={{ race.race_id }}">Download participants CSV</a>
+    <a class="btn btn-outline-secondary btn-sm" href="/api/timing-events.csv?race_id={{ race.race_id }}">Download timing events CSV</a>
+  {% endif %}
   {% if admin %}
     <a class="btn btn-outline-primary btn-sm" href="/admin/races/{{ race.race_id }}/participants/new">Add participant</a>
     <a class="btn btn-outline-primary btn-sm" href="/admin/races/{{ race.race_id }}/participants/upload">Upload participants CSV</a>
