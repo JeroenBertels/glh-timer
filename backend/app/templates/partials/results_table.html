@@ -1,28 +1,34 @@
 <thead>
   <tr>
-    <th>Rank</th>
+    <th>#</th>
     <th>Bib</th>
     <th>Name</th>
-    <th>Group</th>
-    <th>Club</th>
     <th>Sex</th>
+    <th>Group</th>
+    {% if part.race_part_id == "OVERALL" %}
+      {% for p in non_overall_parts %}
+        <th>{{ p.name }}</th>
+      {% endfor %}
+    {% endif %}
     <th>Time</th>
-    <th>Note</th>
+    <th class="text-muted">Note</th>
   </tr>
 </thead>
 <tbody>
   {% for r in results %}
     <tr data-sex="{{ (r.sex or '')|lower }}" data-group="{{ (r.group or '')|lower }}">
-      <td class="text-muted">{{ loop.index }}</td>
-      <td class="fw-semibold">{{ r.bib }}</td>
+      <td>{{ loop.index }}</td>
+      <td>{{ r.bib }}</td>
       <td>{{ r.name }}</td>
-      <td>{{ r.group }}</td>
-      <td>{{ r.club }}</td>
       <td>{{ r.sex }}</td>
-      <td class="font-monospace">{{ r.duration_str if r.duration_str else "—" }}</td>
-      <td class="small text-muted">{{ r.note }}</td>
+      <td>{{ r.group }}</td>
+      {% if part.race_part_id == "OVERALL" %}
+        {% for p in non_overall_parts %}
+          <td>{{ r.splits.get(p.race_part_id, "") }}</td>
+        {% endfor %}
+      {% endif %}
+      <td><strong>{{ r.duration_str }}</strong></td>
+      <td class="text-muted">{{ r.note }}</td>
     </tr>
-  {% else %}
-    <tr data-sex="{{ r.sex|lower }}" data-group="{{ r.group|lower }}"><td colspan="8" class="text-muted">No participants yet.</td></tr>
   {% endfor %}
 </tbody>

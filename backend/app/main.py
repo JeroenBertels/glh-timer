@@ -107,6 +107,9 @@ def race_part_page(
     table = services.get_results(session, race_id, race_part_id)
     start_times = services.get_start_times(session, race_id, race_part_id)
 
+    # needed for OVERALL split columns
+    non_overall_parts = [p for p in services.list_race_parts(session, race_id) if p.time_event_type != "overall"]
+
     return templates.TemplateResponse(
         "race_part.html",
         {
@@ -117,6 +120,7 @@ def race_part_page(
             "admin": admin,
             "start_times": start_times,
             "poll_ms": settings.RESULTS_POLL_MS,
+            "non_overall_parts": non_overall_parts,
         },
     )
 
@@ -229,9 +233,10 @@ def new_timing_submit(
     if request.headers.get("X-Requested-With") == "fetch":
         from fastapi.responses import JSONResponse
         return JSONResponse({"ok": True})
-    return RedirectResponse(url=f"/races/{race_id}/parts/{race_part_id}", status_code=302)
-
-
+    return RedirectResponse(
+        url=f"/admin/races/{race_id}/parts/{race_part_id}/timing/new?ok=1&bib={participant_id.strip()}",
+        status_code=302
+    )
 
 @app.get("/admin/races/{race_id}/participants/upload", response_class=HTMLResponse, dependencies=[Depends(admin_required)])
 def upload_participants_form(race_id: str, request: Request, session=Depends(get_session)):
@@ -252,6 +257,7 @@ async def upload_participants_submit(race_id: str, request: Request, file: Uploa
         return templates.TemplateResponse("participants_upload.html", {"request": request, "race": race, "error": None, "msg": msg})
     except Exception as e:
         return templates.TemplateResponse("participants_upload.html", {"request": request, "race": race, "error": str(e), "msg": None}, status_code=400)
+
 @app.get(
     "/admin/races/{race_id}/parts/{race_part_id}/start-times",
     response_class=HTMLResponse,
@@ -283,7 +289,10 @@ def start_times_submit(
         session,
         StartTimeUpsert(race_id=race_id, race_part_id=race_part_id, group_name=group_name, start_time_hms=start_time_hms),
     )
-    return RedirectResponse(url=f"/races/{race_id}/parts/{race_part_id}", status_code=302)
+    return RedirectResponse(
+        url=f"/admin/races/{race_id}/parts/{race_part_id}/start-times?ok=1",
+        status_code=302
+    )
 
 # ---------------------------
 # API (partials + CSV)
@@ -291,10 +300,17 @@ def start_times_submit(
 
 @app.get("/api/races/{race_id}/parts/{race_part_id}/results/partial", response_class=HTMLResponse)
 def results_partial(race_id: str, race_part_id: str, request: Request, session=Depends(get_session)):
+    race = services.get_race(session, race_id)
+    part = services.get_race_part(session, race_id, race_part_id)
+    if not race or not part:
+        raise HTTPException(status_code=404, detail="Not found")
+
     table = services.get_results(session, race_id, race_part_id)
+    non_overall_parts = [p for p in services.list_race_parts(session, race_id) if p.time_event_type != "overall"]
+
     return templates.TemplateResponse(
         "partials/results_table.html",
-        {"request": request, "results": table},
+        {"request": request, "race": race, "part": part, "results": table, "non_overall_parts": non_overall_parts},
     )
 
 from .csv_export import router as csv_router

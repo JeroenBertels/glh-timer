@@ -34,7 +34,6 @@
 {% endif %}
 
 <div class="d-flex gap-2 mb-3 flex-wrap">
-  <a class="btn btn-outline-secondary btn-sm" href="/api/participants.csv?race_id={{ race.race_id }}">Download participants CSV</a>
 </div>
 
 <div class="card shadow-sm mb-3">
@@ -76,7 +75,7 @@
       <div class="small text-muted">Auto-refresh every {{ (poll_ms/1000)|int }}s</div>
     </div>
     <div class="table-responsive">
-      <table class="table table-sm align-middle" id="results-table">
+      <table id="results-table" class="table table-sm align-middle" id="results-table">
         {% include "partials/results_table.html" %}
       </table>
     </div>

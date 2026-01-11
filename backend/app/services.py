@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, date, time, timedelta, timezone
 from zoneinfo import ZoneInfo
 import re
@@ -33,6 +33,10 @@ def _parse_hms_to_seconds(s: str) -> int:
         hh, mm, ss = parts
         return int(hh) * 3600 + int(mm) * 60 + int(ss)
     raise ValueError("Invalid duration format. Use seconds, MM:SS, or HH:MM:SS")
+
+
+def parse_duration(s: str) -> int:
+    return _parse_hms_to_seconds(s)
 
 def _format_seconds(sec: Optional[int]) -> str:
     if sec is None:
@@ -79,7 +83,12 @@ def create_race_part(session: Session, payload: RacePartCreate) -> None:
         raise ValueError("Reserved race_part_id")
     # uniqueness
     existing = session.execute(
-        select(models.RacePart).where(and_(models.RacePart.race_id == payload.race_id, models.RacePart.race_part_id == payload.race_part_id))
+        select(models.RacePart).where(
+            and_(
+                models.RacePart.race_id == payload.race_id,
+                models.RacePart.race_part_id == payload.race_part_id,
+            )
+        )
     ).scalar_one_or_none()
     if existing:
         raise ValueError("Race part already exists")
@@ -91,6 +100,7 @@ def create_race_part(session: Session, payload: RacePartCreate) -> None:
     )
     session.add(rp)
     session.commit()
+
 
 def list_race_parts(session: Session, race_id: str):
     return session.execute(
@@ -126,17 +136,25 @@ def list_participants(session: Session, race_id: str):
     ).scalars().all()
 
 def create_timing_event(session: Session, payload: TimingEventCreate) -> None:
+    race = get_race(session, payload.race_id)
+    if not race:
+        raise ValueError("Race not found")
+
     part = get_race_part(session, payload.race_id, payload.race_part_id)
     if not part:
         raise ValueError("Race part not found")
-    if part.time_event_type == "overall":
-        raise ValueError("Cannot submit timing for overall")
 
     participant = session.execute(
-        select(models.Participant).where(and_(models.Participant.race_id == payload.race_id, models.Participant.participant_id == payload.participant_id))
+        select(models.Participant).where(
+            and_(
+                models.Participant.race_id == payload.race_id,
+                models.Participant.participant_id == payload.participant_id,
+            )
+        )
     ).scalar_one_or_none()
+
+    # Auto-create placeholder participant if needed
     if not participant:
-    # Auto-create placeholder participant so we never lose a timing event.
         participant = models.Participant(
             race_id=payload.race_id,
             participant_id=payload.participant_id,
@@ -157,24 +175,25 @@ def create_timing_event(session: Session, payload: TimingEventCreate) -> None:
         participant_fk=participant.id,
     )
 
-    # Determine mode:
     if part.time_event_type == "duration":
         if not payload.duration:
-            raise ValueError("Duration is required for duration-type race parts")
-        ev.duration_seconds = _parse_hms_to_seconds(payload.duration)
-    elif part.time_event_type == "end_time":
-        # server time
-        race = get_race(session, payload.race_id)
-        tz_name = (race.race_timezone if race else "UTC")
-        ev.end_time_utc = datetime.now(ZoneInfo(tz_name)).replace(tzinfo=None)
-        if payload.client_timestamp_ms:
-            try:
-                ev.client_timestamp_ms = int(payload.client_timestamp_ms)
-            except ValueError:
-                pass
-        # duration is computed later using start time
+            raise ValueError("Duration required")
+        ev.duration_seconds = parse_duration(payload.duration)
+    else:
+        # end_time events: store server time as naive local time in race timezone
+        tz_name = (race.race_timezone or "UTC")
+        end_dt = datetime.now(ZoneInfo(tz_name)).replace(tzinfo=None)
+        ev.end_time_utc = end_dt
+
+    if payload.client_timestamp_ms:
+        try:
+            ev.client_timestamp_ms = int(payload.client_timestamp_ms)
+        except Exception:
+            pass
+
     session.add(ev)
     session.commit()
+
 
 def upsert_start_time(session: Session, payload: StartTimeUpsert) -> None:
     part = get_race_part(session, payload.race_id, payload.race_part_id)
@@ -228,6 +247,7 @@ class ResultRow:
     duration_seconds: Optional[int]
     duration_str: str
     note: str = ""
+    splits: dict[str, str] = field(default_factory=dict)
 
 def _get_start_time_for_group(session: Session, race_id: str, race_part_id: str, group_name: str) -> Optional[time]:
     group = (group_name or "").strip()
@@ -285,6 +305,7 @@ def get_results(session: Session, race_id: str, race_part_id: str) -> list[Resul
     participants = list_participants(session, race_id)
     # best timing event per participant depending on part type
     rows: list[ResultRow] = []
+    splits_map: dict[str, dict[str, str]] = {}
 
     if part.time_event_type == "overall":
         # Sum best durations across all non-overall parts
@@ -296,14 +317,17 @@ def get_results(session: Session, race_id: str, race_part_id: str) -> list[Resul
         for p in non_overall_parts:
             best[p.race_part_id] = _best_durations_for_part(session, race, p, participants)
         for participant in participants:
+            splits: dict[str, str] = {}
             total = 0
             missing = []
             for p in non_overall_parts:
                 d = best[p.race_part_id].get(participant.participant_id)
+                splits[p.race_part_id] = _format_seconds(d) if d is not None else ""
                 if d is None:
                     missing.append(p.name)
                 else:
                     total += d
+            splits_map[participant.participant_id] = splits
             note = ""
             total_val = None
             if non_overall_parts and missing:
@@ -320,6 +344,7 @@ def get_results(session: Session, race_id: str, race_part_id: str) -> list[Resul
                     duration_seconds=total_val,
                     duration_str=_format_seconds(total_val),
                     note=note,
+                splits=splits_map.get(participant.participant_id, {}),
                 )
             )
         # sort by total duration (None last)
@@ -347,11 +372,11 @@ def get_results(session: Session, race_id: str, race_part_id: str) -> list[Resul
                 duration_seconds=d,
                 duration_str=_format_seconds(d),
                 note=note,
+                splits=splits_map.get(participant.participant_id, {}),
             )
         )
     rows.sort(key=lambda r: (r.duration_seconds is None, r.duration_seconds or 10**12, r.bib))
     return rows
-
 def _best_event_for_duration(session: Session, race_id: str, race_part_id: str, bib: str) -> Optional[models.TimingEvent]:
     return session.execute(
         select(models.TimingEvent)

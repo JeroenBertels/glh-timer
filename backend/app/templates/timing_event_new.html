@@ -3,6 +3,10 @@
 <div class="mb-3">
   <div class="text-muted"><a href="/races/{{ race.race_id }}/parts/{{ part.race_part_id }}">← Back</a></div>
   <h1 class="h3 m-0">Submit timing event</h1>
+
+{% if msg %}
+  <div class="alert alert-success mt-3">{{ msg }}</div>
+{% endif %}
   <div class="text-muted">{{ race.race_id }} • {{ part.name }} • Type: {{ part.time_event_type }}</div>
 </div>
 
@@ -64,8 +68,38 @@
 \
 {% block scripts %}
 <script>
-  // Always store client-side timestamp as a backup (server time is the source of truth)
+  function beepSuccess() {
+    try {
+      const AudioCtx = window.AudioContext || window.webkitAudioContext;
+      if (!AudioCtx) return;
+      const ctx = new AudioCtx();
+      const o = ctx.createOscillator();
+      const g = ctx.createGain();
+      o.type = "sine";
+      o.frequency.value = 880;
+      g.gain.value = 0.05;
+      o.connect(g);
+      g.connect(ctx.destination);
+      o.start();
+      setTimeout(() => { o.stop(); ctx.close(); }, 120);
+    } catch (e) {}
+  }
+
+  function vibrateSuccess() {
+    try {
+      if (navigator.vibrate) navigator.vibrate([60, 30, 60]);
+    } catch (e) {}
+  }
+
+// Always store client-side timestamp as a backup (server time is the source of truth)
   document.getElementById("client_timestamp_ms").value = Date.now();
+  // If we came back after a successful submit, clear and focus for the next entry
+  {% if msg %}
+  try {
+    const el = document.getElementById("participant_id");
+    if (el) { el.value = ""; el.focus(); }
+  } catch (e) {}
+  {% endif %}
 
   {% if part.time_event_type == "end_time" %}
   let qr;
@@ -174,6 +208,14 @@ function setStatus(msg, kind) {
   document.getElementById("start-scan").addEventListener("click", startScan);
   document.getElementById("stop-scan").addEventListener("click", stopScan);
   {% endif %}
+
+  document.addEventListener("DOMContentLoaded", () => {
+    const el = document.getElementById("submit-status");
+    if (el && el.dataset && el.dataset.kind === "ok") {
+      beepSuccess();
+      vibrateSuccess();
+    }
+  });
 </script>
 {% endblock %}
 
