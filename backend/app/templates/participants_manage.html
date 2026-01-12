@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <div>
+    <h2 class="mb-0">Participants</h2>
+    <div class="text-muted">Race: {{ race.race_id }}</div>
+  </div>
+  <div class="d-flex gap-2">
+    <a class="btn btn-outline-secondary btn-sm" href="/races/{{ race.race_id }}">Back to race</a>
+    <a class="btn btn-outline-primary btn-sm" href="/admin/races/{{ race.race_id }}/participants/new">Add participant</a>
+  </div>
+</div>
+
+<div class="card shadow-sm">
+  <div class="card-body p-0">
+    <div class="table-responsive">
+      <table class="table table-sm mb-0">
+        <thead>
+          <tr>
+            <th>BIB</th>
+            <th>Name</th>
+            <th>Group</th>
+            <th>Club</th>
+            <th>Sex</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for p in participants %}
+            <tr>
+              <td>{{ p.participant_id }}</td>
+              <td>{{ p.firstname }} {{ p.lastname }}</td>
+              <td>{{ p.group_name or "" }}</td>
+              <td>{{ p.club_name or "" }}</td>
+              <td>{{ p.sex or "" }}</td>
+              <td class="text-end">
+                <form method="post" action="/admin/races/{{ race.race_id }}/participants/{{ p.participant_id }}/delete" onsubmit="return confirm('Remove participant {{ p.participant_id }}?');" style="display:inline">
+                  <button class="btn btn-outline-danger btn-sm" type="submit">Remove</button>
+                </form>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}

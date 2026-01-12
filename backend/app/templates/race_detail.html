@@ -20,6 +20,9 @@
     <a class="btn btn-outline-primary btn-sm" href="/admin/races/{{ race.race_id }}/participants/new">Add participant</a>
     <a class="btn btn-outline-primary btn-sm" href="/admin/races/{{ race.race_id }}/participants/upload">Upload participants CSV</a>
     {% if staff.role == "admin" %}
+      <a class="btn btn-outline-danger btn-sm" href="/admin/races/{{ race.race_id }}/participants">Remove participant</a>
+    {% endif %}
+    {% if staff.role == "admin" %}
       <a class="btn btn-outline-success btn-sm" href="/admin/users/new?race_id={{ race.race_id }}">Create organizer account</a>
     {% endif %}
   {% endif %}
@@ -28,15 +31,24 @@
 <h2 class="h5 mt-4">Race parts</h2>
 <div class="list-group shadow-sm">
   {% for p in parts %}
-    <a class="list-group-item list-group-item-action" href="/races/{{ race.race_id }}/parts/{{ p.race_part_id }}">
-      <div class="d-flex justify-content-between align-items-center">
-        <div>
-          <div class="fw-semibold">{{ p.name }}</div>
+    <div class="list-group-item">
+      <div class="d-flex justify-content-between align-items-center gap-2">
+        <div class="flex-grow-1">
+          <div class="fw-semibold">
+            <a href="/races/{{ race.race_id }}/parts/{{ p.race_part_id }}" class="text-decoration-none">{{ p.name }}</a>
+          </div>
           <div class="small text-muted">ID: {{ p.race_part_id }} • Type: {{ p.time_event_type }}</div>
         </div>
-        <span class="badge text-bg-secondary">{{ p.time_event_type }}</span>
+        <div class="d-flex align-items-center gap-2">
+          <span class="badge text-bg-secondary">{{ p.time_event_type }}</span>
+          {% if staff and staff.role == "admin" and p.race_part_id != "OVERALL" %}
+            <form method="post" action="/admin/races/{{ race.race_id }}/parts/{{ p.race_part_id }}/delete" onsubmit="return confirm('Remove race part {{ p.name }}? This will also remove its timing events and start times.');">
+              <button class="btn btn-outline-danger btn-sm" type="submit">Remove</button>
+            </form>
+          {% endif %}
+        </div>
       </div>
-    </a>
+    </div>
   {% endfor %}
 </div>
 {% endblock %}

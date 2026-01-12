@@ -18,15 +18,19 @@
       <ul class="navbar-nav me-auto">
         <li class="nav-item"><a class="nav-link" href="/races">GLH Timer</a></li>
       </ul>
-      <div class="d-flex gap-2">
-        {% if request.cookies.get("glh_auth") %}
-          <form method="post" action="/logout">
-            <button class="btn btn-outline-light btn-sm" type="submit">Logout</button>
-          </form>
-        {% else %}
-          <a class="btn btn-outline-light btn-sm" href="/login">Login</a>
-        {% endif %}
-      </div>
+      {# Only show auth buttons on GLH Timer pages (not on bertels.ai landing page). #}
+      {% set p = request.url.path %}
+      {% if p.startswith('/races') or p.startswith('/admin') or p.startswith('/login') or p.startswith('/projects/glh-timer') %}
+        <div class="d-flex gap-2">
+          {% if request.cookies.get("glh_auth") %}
+            <form method="post" action="/logout">
+              <button class="btn btn-outline-light btn-sm" type="submit">Logout</button>
+            </form>
+          {% else %}
+            <a class="btn btn-outline-light btn-sm" href="/login">Login</a>
+          {% endif %}
+        </div>
+      {% endif %}
     </div>
   </div>
 </nav>

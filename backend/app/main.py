@@ -101,10 +101,12 @@ def admin_logout_redirect(request: Request):
 
 @app.get("/races", response_class=HTMLResponse)
 def races_page(request: Request, user=Depends(get_current_user), session=Depends(get_session)):
+    # Everyone can see all races. Organizer permissions are enforced per-race.
     races = services.list_races(session)
-    if user and getattr(user, 'role', None) == 'organizer' and user.race_id:
-        races = [r for r in races if r.race_id == user.race_id]
-    return templates.TemplateResponse("races.html", {"request": request, "races": races, "user": user, "admin": (user if user and user.is_admin else None), "staff": user})
+    return templates.TemplateResponse(
+        "races.html",
+        {"request": request, "races": races, "user": user, "admin": (user if user and user.is_admin else None), "staff": user},
+    )
 
 @app.get("/races/{race_id}", response_class=HTMLResponse)
 def race_detail_page(race_id: str, request: Request, user=Depends(get_current_user), session=Depends(get_session)):
@@ -112,7 +114,11 @@ def race_detail_page(race_id: str, request: Request, user=Depends(get_current_us
     if not race:
         raise HTTPException(status_code=404, detail="Race not found")
     parts = services.list_race_parts(session, race_id)
-    return templates.TemplateResponse("race_detail.html", {"request": request, "race": race, "parts": parts, "user": user, "admin": (user if user and user.is_admin else None), "staff": user})
+    staff_for_race = user if (user and (user.is_admin or (user.role == "organizer" and user.race_id == race_id))) else None
+    return templates.TemplateResponse(
+        "race_detail.html",
+        {"request": request, "race": race, "parts": parts, "user": user, "admin": (user if user and user.is_admin else None), "staff": staff_for_race},
+    )
 
 @app.get("/races/{race_id}/parts/{race_part_id}", response_class=HTMLResponse)
 def race_part_page(
@@ -136,6 +142,8 @@ def race_part_page(
     # needed for OVERALL split columns
     non_overall_parts = [p for p in services.list_race_parts(session, race_id) if p.time_event_type != "overall"]
 
+    staff_for_race = user if (user and (user.is_admin or (user.role == "organizer" and user.race_id == race_id))) else None
+
     return templates.TemplateResponse(
         "race_part.html",
         {
@@ -143,7 +151,7 @@ def race_part_page(
             "race": race,
             "part": part,
             "results": table,
-            "user": user, "admin": (user if user and user.is_admin else None), "staff": user,
+            "user": user, "admin": (user if user and user.is_admin else None), "staff": staff_for_race,
             "start_times": start_times,
             "poll_ms": settings.RESULTS_POLL_MS,
             "non_overall_parts": non_overall_parts,
@@ -200,7 +208,7 @@ def user_new_submit(
 
 @app.get("/admin/races/new", response_class=HTMLResponse, dependencies=[Depends(admin_required)])
 def new_race_form(request: Request):
-    return templates.TemplateResponse("race_new.html", {"request": request, "tz_default": "Europe/Brussels"})
+    return templates.TemplateResponse("race_new.html", {"request": request, "tz_default": "Europe/Brussels", "error": None})
 
 @app.post("/admin/races/new", dependencies=[Depends(admin_required)])
 def new_race_submit(
@@ -209,16 +217,24 @@ def new_race_submit(
     race_timezone: str = Form(...),
     session=Depends(get_session),
 ):
-    services.create_race(session, RaceCreate(race_id=race_id, race_date=race_date, race_timezone=race_timezone))
+    try:
+        services.create_race(session, RaceCreate(race_id=race_id, race_date=race_date, race_timezone=race_timezone))
+    except Exception as e:
+        return templates.TemplateResponse(
+            "race_new.html",
+            {"request": request, "tz_default": "Europe/Brussels", "error": str(e)},
+            status_code=400,
+        )
     return RedirectResponse(url="/races", status_code=302)
 
 @app.get("/admin/races/{race_id}/parts/new", response_class=HTMLResponse, dependencies=[Depends(staff_required)])
 def new_part_form(race_id: str, request: Request, user=Depends(staff_required), session=Depends(get_session)):
     assert_can_access_race(user, race_id)
-    return templates.TemplateResponse("race_part_new.html", {"request": request, "race_id": race_id})
+    return templates.TemplateResponse("race_part_new.html", {"request": request, "race_id": race_id, "error": None})
 
 @app.post("/admin/races/{race_id}/parts/new", dependencies=[Depends(staff_required)])
 def new_part_submit(
+    request: Request,
     race_id: str,
     user=Depends(staff_required),
     race_part_id: str = Form(...),
@@ -227,24 +243,42 @@ def new_part_submit(
     session=Depends(get_session),
 ):
     assert_can_access_race(user, race_id)
-    services.create_race_part(
-        session,
-        RacePartCreate(
-            race_id=race_id,
-            race_part_id=race_part_id,
-            name=name,
-            time_event_type=time_event_type,
-        ),
-    )
+    try:
+        services.create_race_part(
+            session,
+            RacePartCreate(
+                race_id=race_id,
+                race_part_id=race_part_id,
+                name=name,
+                time_event_type=time_event_type,
+            ),
+        )
+    except Exception as e:
+        return templates.TemplateResponse(
+            "race_part_new.html",
+            {"request": request, "race_id": race_id, "error": str(e)},
+            status_code=400,
+        )
+    return RedirectResponse(url=f"/races/{race_id}", status_code=302)
+
+
+@app.post("/admin/races/{race_id}/parts/{race_part_id}/delete", dependencies=[Depends(admin_required)])
+def delete_race_part_submit(race_id: str, race_part_id: str, session=Depends(get_session)):
+    try:
+        services.delete_race_part(session, race_id, race_part_id)
+    except Exception:
+        # ignore and just return to race page
+        pass
     return RedirectResponse(url=f"/races/{race_id}", status_code=302)
 
 @app.get("/admin/races/{race_id}/participants/new", response_class=HTMLResponse, dependencies=[Depends(staff_required)])
 def new_participant_form(race_id: str, request: Request, user=Depends(staff_required), session=Depends(get_session)):
     assert_can_access_race(user, race_id)
-    return templates.TemplateResponse("participant_new.html", {"request": request, "race_id": race_id})
+    return templates.TemplateResponse("participant_new.html", {"request": request, "race_id": race_id, "error": None})
 
 @app.post("/admin/races/{race_id}/participants/new", dependencies=[Depends(staff_required)])
 def new_participant_submit(
+    request: Request,
     race_id: str,
     user=Depends(staff_required),
     participant_id: str = Form(...),
@@ -256,19 +290,54 @@ def new_participant_submit(
     session=Depends(get_session),
 ):
     assert_can_access_race(user, race_id)
-    services.create_participant(
-        session,
-        ParticipantCreate(
-            race_id=race_id,
-            participant_id=participant_id,
-            firstname=firstname,
-            lastname=lastname,
-            sex=sex,
-            group_name=group_name,
-            club_name=club_name,
-        ),
-    )
+    try:
+        services.create_participant(
+            session,
+            ParticipantCreate(
+                race_id=race_id,
+                participant_id=participant_id,
+                firstname=firstname,
+                lastname=lastname,
+                sex=sex,
+                group_name=group_name,
+                club_name=club_name,
+            ),
+        )
+    except Exception as e:
+        return templates.TemplateResponse(
+            "participant_new.html",
+            {"request": request, "race_id": race_id, "error": str(e)},
+            status_code=400,
+        )
     return RedirectResponse(url=f"/races/{race_id}", status_code=302)
+
+
+@app.get("/admin/races/{race_id}/participants", response_class=HTMLResponse, dependencies=[Depends(admin_required)])
+def manage_participants_page(race_id: str, request: Request, session=Depends(get_session)):
+    # admin can manage any race
+    race = services.get_race(session, race_id)
+    if not race:
+        raise HTTPException(status_code=404, detail="Race not found")
+    participants = services.list_participants(session, race_id)
+    return templates.TemplateResponse(
+        "participants_manage.html",
+        {"request": request, "race": race, "participants": participants, "error": None},
+    )
+
+
+@app.post("/admin/races/{race_id}/participants/{participant_id}/delete", dependencies=[Depends(admin_required)])
+def delete_participant_submit(race_id: str, participant_id: str, request: Request, session=Depends(get_session)):
+    try:
+        services.delete_participant(session, race_id=race_id, participant_id=participant_id)
+    except Exception as e:
+        race = services.get_race(session, race_id)
+        participants = services.list_participants(session, race_id)
+        return templates.TemplateResponse(
+            "participants_manage.html",
+            {"request": request, "race": race, "participants": participants, "error": str(e)},
+            status_code=400,
+        )
+    return RedirectResponse(url=f"/admin/races/{race_id}/participants", status_code=302)
 
 @app.get(
     "/admin/races/{race_id}/parts/{race_part_id}/timing/new",

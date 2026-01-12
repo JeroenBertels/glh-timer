@@ -3,6 +3,9 @@
 <h1 class="h3 mb-3">Add participant</h1>
 <div class="card shadow-sm" style="max-width: 860px;">
   <div class="card-body">
+    {% if error %}
+      <div class="alert alert-danger">{{ error }}</div>
+    {% endif %}
     <form method="post">
       <div class="row g-3">
         <div class="col-12 col-md-4">

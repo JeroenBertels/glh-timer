@@ -109,6 +109,34 @@ def list_users(session: Session) -> list[models.User]:
     return session.execute(select(models.User).order_by(models.User.role.asc(), models.User.username.asc())).scalars().all()
 
 
+def delete_race_part(session: Session, race_id: str, race_part_id: str) -> None:
+    """Delete a race part (admin-only action)."""
+    if race_part_id == OVERALL_PART_ID:
+        raise ValueError("Cannot delete OVERALL race part")
+    part = session.execute(
+        select(models.RacePart).where(
+            and_(models.RacePart.race_id == race_id, models.RacePart.race_part_id == race_part_id)
+        )
+    ).scalar_one_or_none()
+    if not part:
+        raise ValueError("Race part not found")
+    session.delete(part)
+    session.commit()
+
+
+def delete_participant(session: Session, race_id: str, participant_id: str) -> None:
+    """Delete a participant (admin-only action)."""
+    p = session.execute(
+        select(models.Participant).where(
+            and_(models.Participant.race_id == race_id, models.Participant.participant_id == participant_id)
+        )
+    ).scalar_one_or_none()
+    if not p:
+        raise ValueError("Participant not found")
+    session.delete(p)
+    session.commit()
+
+
 def _parse_date_yyyy_mm_dd(s: str) -> date:
     return datetime.strptime(s, "%Y-%m-%d").date()
 
