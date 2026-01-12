@@ -45,11 +45,11 @@ def _startup() -> None:
 
 @app.get("/", response_class=HTMLResponse)
 def landing(request: Request):
-    return templates.TemplateResponse("landing.html", {"request": request})
+    return RedirectResponse(url="/races", status_code=302)
 
-@app.get("/projects", response_class=HTMLResponse)
-def projects(request: Request):
-    return templates.TemplateResponse("projects.html", {"request": request})
+# @app.get("/projects", response_class=HTMLResponse)
+# def projects(request: Request):
+#     return templates.TemplateResponse("projects.html", {"request": request})
 
 @app.get("/projects/glh-timer", response_class=HTMLResponse)
 def glh_timer_home(request: Request):

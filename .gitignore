@@ -4,3 +4,5 @@ __pycache__
 .env
 bib_*
 *.pem
+*.zip
+*.db

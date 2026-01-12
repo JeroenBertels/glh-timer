@@ -1,13 +1,13 @@
 from pydantic_settings import BaseSettings
 
 class Settings(BaseSettings):
-    # Security
-    GLH_ADMIN_USERNAME: str = "admin"
-    GLH_ADMIN_PASSWORD: str = "change-me"
-    GLH_SECRET_KEY: str = "dev-secret-change-me"
+    # Security (NO defaults!)
+    GLH_ADMIN_USERNAME: str
+    GLH_ADMIN_PASSWORD: str
+    GLH_SECRET_KEY: str
 
     # Database
-    GLH_DB_URL: str = "sqlite:///./glh_timer.db"
+    GLH_DB_URL: str
 
     # UI
     RESULTS_POLL_MS: int = 5000
