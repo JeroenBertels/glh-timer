@@ -10,10 +10,104 @@ from sqlalchemy import select, and_, func
 from sqlalchemy.orm import Session
 
 from . import models
+from .settings import settings
 from .schemas import RaceCreate, RacePartCreate, ParticipantCreate, TimingEventCreate, StartTimeUpsert
 
 OVERALL_PART_ID = "OVERALL"
 OVERALL_PART_NAME = "Overall"
+
+# ---------------------------
+# Users / auth
+# ---------------------------
+
+_PBKDF2_ITERS = 200_000
+
+def _hash_password(password: str) -> str:
+    import os, hashlib, base64
+    salt = os.urandom(16)
+    dk = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt, _PBKDF2_ITERS)
+    return "pbkdf2_sha256$%d$%s$%s" % (
+        _PBKDF2_ITERS,
+        base64.b64encode(salt).decode("ascii"),
+        base64.b64encode(dk).decode("ascii"),
+    )
+
+def _verify_password(password: str, stored: str) -> bool:
+    import hashlib, base64, hmac
+    try:
+        algo, iters_s, salt_b64, dk_b64 = stored.split("$", 3)
+        if algo != "pbkdf2_sha256":
+            return False
+        iters = int(iters_s)
+        salt = base64.b64decode(salt_b64.encode("ascii"))
+        dk_expected = base64.b64decode(dk_b64.encode("ascii"))
+        dk = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt, iters)
+        return hmac.compare_digest(dk, dk_expected)
+    except Exception:
+        return False
+
+def ensure_admin_user(session: Session) -> None:
+    """Ensure the single admin account (from settings) exists in DB."""
+    existing = session.execute(
+        select(models.User).where(models.User.username == settings.GLH_ADMIN_USERNAME)
+    ).scalar_one_or_none()
+
+    if existing:
+        changed = False
+
+        if existing.role != "admin":
+            existing.role = "admin"
+            existing.race_id = None
+            changed = True
+
+        # DEV FRIENDLY: always sync admin password from settings
+        existing.password_hash = _hash_password(settings.GLH_ADMIN_PASSWORD)
+        changed = True
+
+        if not existing.is_active:
+            existing.is_active = 1
+            changed = True
+
+        if changed:
+            session.commit()
+        return
+
+    u = models.User(
+        username=settings.GLH_ADMIN_USERNAME,
+        password_hash=_hash_password(settings.GLH_ADMIN_PASSWORD),
+        role="admin",
+        race_id=None,
+        is_active=1,
+    )
+    session.add(u)
+    session.commit()
+
+def authenticate_user(session: Session, username: str, password: str) -> Optional[models.User]:
+    u = session.execute(select(models.User).where(models.User.username == username)).scalar_one_or_none()
+    if not u or not u.is_active:
+        return None
+    if _verify_password(password, u.password_hash):
+        return u
+    return None
+
+def create_organizer_user(session: Session, username: str, password: str, race_id: str) -> None:
+    if session.execute(select(models.User).where(models.User.username == username)).scalar_one_or_none():
+        raise ValueError("Username already exists")
+    if not session.get(models.Race, race_id):
+        raise ValueError("Race not found")
+    u = models.User(
+        username=username,
+        password_hash=_hash_password(password),
+        role="organizer",
+        race_id=race_id,
+        is_active=1,
+    )
+    session.add(u)
+    session.commit()
+
+def list_users(session: Session) -> list[models.User]:
+    return session.execute(select(models.User).order_by(models.User.role.asc(), models.User.username.asc())).scalars().all()
+
 
 def _parse_date_yyyy_mm_dd(s: str) -> date:
     return datetime.strptime(s, "%Y-%m-%d").date()

@@ -6,6 +6,17 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .db import Base
 
+
+class User(Base):
+    __tablename__ = "users"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    username: Mapped[str] = mapped_column(String, nullable=False, unique=True, index=True)
+    password_hash: Mapped[str] = mapped_column(String, nullable=False)
+    role: Mapped[str] = mapped_column(String, nullable=False, default="organizer")  # admin | organizer
+    race_id: Mapped[str | None] = mapped_column(String, nullable=True)  # for organizers; admin has None
+    is_active: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+
+
 class Race(Base):
     __tablename__ = "races"
     race_id: Mapped[str] = mapped_column(String, primary_key=True)

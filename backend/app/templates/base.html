@@ -19,12 +19,12 @@
         <li class="nav-item"><a class="nav-link" href="/races">GLH Timer</a></li>
       </ul>
       <div class="d-flex gap-2">
-        {% if request.cookies.get("glh_admin") %}
-          <form method="post" action="/admin/logout">
+        {% if request.cookies.get("glh_auth") %}
+          <form method="post" action="/logout">
             <button class="btn btn-outline-light btn-sm" type="submit">Logout</button>
           </form>
         {% else %}
-          <a class="btn btn-outline-light btn-sm" href="/admin/login">Organizer login</a>
+          <a class="btn btn-outline-light btn-sm" href="/login">Login</a>
         {% endif %}
       </div>
     </div>

@@ -1,57 +1,92 @@
 from __future__ import annotations
+
+from dataclasses import dataclass
+from typing import Optional
+
 from fastapi import Request, HTTPException, Depends
 from itsdangerous import URLSafeSerializer, BadSignature
 
 from .settings import settings
 
-_cookie_name = "glh_admin"
+COOKIE_NAME = "glh_auth"
 
 def _serializer() -> URLSafeSerializer:
-    return URLSafeSerializer(settings.GLH_SECRET_KEY, salt="glh-timer")
+    return URLSafeSerializer(settings.GLH_SECRET_KEY, salt="glh-timer-auth")
 
-def login_admin(request: Request, username: str, password: str) -> bool:
-    if username != settings.GLH_ADMIN_USERNAME or password != settings.GLH_ADMIN_PASSWORD:
-        return False
-    token = _serializer().dumps({"u": username})
-    # Set cookie on response is done by middleware pattern below:
-    request.state._set_admin_cookie = token
-    return True
+@dataclass
+class CurrentUser:
+    id: int
+    username: str
+    role: str  # "admin" | "organizer"
+    race_id: Optional[str] = None
 
-def logout_admin(request: Request) -> None:
-    request.state._clear_admin_cookie = True
+    @property
+    def is_admin(self) -> bool:
+        return self.role == "admin"
 
-def get_current_admin(request: Request):
-    token = request.cookies.get(_cookie_name)
-    if not token:
+    @property
+    def is_organizer(self) -> bool:
+        return self.role == "organizer"
+
+def set_login_cookie(request: Request, *, user_id: int, username: str, role: str, race_id: Optional[str]) -> None:
+    token = _serializer().dumps({"id": user_id, "u": username, "r": role, "race_id": race_id})
+    request.state._set_auth_cookie = token
+
+def clear_login_cookie(request: Request) -> None:
+    request.state._clear_auth_cookie = True
+
+def get_current_user(request: Request) -> Optional[CurrentUser]:
+    raw = request.cookies.get(COOKIE_NAME)
+    if not raw:
         return None
     try:
-        data = _serializer().loads(token)
-        return data.get("u")
-    except BadSignature:
+        data = _serializer().loads(raw)
+        return CurrentUser(
+            id=int(data["id"]),
+            username=str(data.get("u") or ""),
+            role=str(data.get("r") or ""),
+            race_id=data.get("race_id"),
+        )
+    except (BadSignature, Exception):
         return None
 
-def admin_required(admin=Depends(get_current_admin)):
-    if not admin:
-        raise HTTPException(status_code=401, detail="Admin login required")
-    return admin
+def staff_required(user: CurrentUser = Depends(get_current_user)) -> CurrentUser:
+    if not user:
+        raise HTTPException(status_code=401, detail="Login required")
+    if user.role not in ("admin", "organizer"):
+        raise HTTPException(status_code=403, detail="Forbidden")
+    return user
 
-# Cookie middleware
+def admin_required(user: CurrentUser = Depends(get_current_user)) -> CurrentUser:
+    if not user or user.role != "admin":
+        raise HTTPException(status_code=403, detail="Admin required")
+    return user
+
+def assert_can_access_race(user: CurrentUser, race_id: str) -> None:
+    # Admin can access everything; organizers only their assigned race
+    if user.role == "admin":
+        return
+    if user.role == "organizer" and user.race_id == race_id:
+        return
+    raise HTTPException(status_code=403, detail="Not allowed for this race")
+
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import Response
 
-class AdminCookieMiddleware(BaseHTTPMiddleware):
+class AuthCookieMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         response: Response = await call_next(request)
-        token = getattr(request.state, "_set_admin_cookie", None)
+
+        token = getattr(request.state, "_set_auth_cookie", None)
         if token:
             response.set_cookie(
-                _cookie_name,
+                COOKIE_NAME,
                 token,
                 httponly=True,
                 samesite="lax",
-                secure=False,  # set True when behind HTTPS later
+                secure=False,  # set True behind HTTPS
                 max_age=60 * 60 * 12,
             )
-        if getattr(request.state, "_clear_admin_cookie", False):
-            response.delete_cookie(_cookie_name)
+        if getattr(request.state, "_clear_auth_cookie", False):
+            response.delete_cookie(COOKIE_NAME)
         return response

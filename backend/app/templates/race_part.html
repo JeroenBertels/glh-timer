@@ -6,7 +6,7 @@
     <h1 class="h3 m-0">{{ part.name }}</h1>
     <div class="text-muted">Race: {{ race.race_id }} • Part ID: {{ part.race_part_id }} • Type: {{ part.time_event_type }}</div>
   </div>
-  {% if admin %}
+  {% if staff %}
     <div class="d-flex gap-2 flex-wrap">
       <a class="btn btn-outline-secondary" href="/api/results.csv?race_id={{ race.race_id }}&race_part_id={{ part.race_part_id }}">Download results CSV</a>
       {% if part.time_event_type != "overall" %}
