@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Races</h1>
+<div class="card">
+  <div class="actions">
+    {% if user and user.role == "admin" %}
+      <a class="button" href="/manage/races">Manage Races</a>
+      <a class="button ghost" href="/manage/organisers">Manage Organisers</a>
+    {% endif %}
+  </div>
+</div>
+<div class="card">
+  <table class="table">
+    <thead>
+      <tr>
+        <th>Race</th>
+        <th>Date</th>
+        <th>Status</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for item in races %}
+      <tr>
+        <td><a href="/race/{{ item.race.race_id }}">{{ item.race.race_id }}</a></td>
+        <td>{{ item.race.race_date }}</td>
+        <td><span class="badge {{ item.status }}">{{ item.status }}</span></td>
+      </tr>
+      {% else %}
+      <tr>
+        <td colspan="3" class="small">No races yet.</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

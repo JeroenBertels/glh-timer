@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>{{ race.race_id }}</h1>
+<div class="card">
+  <div class="actions">
+    {% if user and (user.role == "admin" or race.race_id in user.race_ids) %}
+      <a class="button" href="/race/{{ race.race_id }}/manage/race-parts">Manage Race Parts</a>
+      <a class="button" href="/race/{{ race.race_id }}/manage/participants">Manage Participants</a>
+      <a class="button ghost" href="/race/{{ race.race_id }}/qrcodes.zip">Download QR Codes</a>
+    {% endif %}
+  </div>
+</div>
+<div class="card">
+  <h2>Race Parts</h2>
+  <table class="table">
+    <thead>
+      <tr>
+        <th>Part</th>
+        <th>Order</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for part in race_parts %}
+      <tr>
+        <td><a href="/race/{{ race.race_id }}/part/{{ part.race_part_id }}">{{ part.race_part_id }}</a></td>
+        <td>{{ part.race_order }}</td>
+      </tr>
+      {% else %}
+      <tr>
+        <td colspan="2" class="small">No race parts yet.</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

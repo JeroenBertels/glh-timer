@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Automated Wave Starts</h1>
+<div class="card">
+  <form id="wave-form" method="post" action="/race/{{ race.race_id }}/part/{{ race_part_id }}/submit-start/wave/data">
+    <label>
+      Participants or Groups (comma-separated)
+      <input type="text" name="targets" required />
+    </label>
+    <button type="submit">Start Wave Starts</button>
+  </form>
+</div>
+<div class="card">
+  <div id="wave-status" class="small">Waiting to start…</div>
+  <table class="table" id="wave-table">
+    <thead>
+      <tr>
+        <th>Bib</th>
+        <th>Group</th>
+        <th>Offset</th>
+        <th>Status</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  const form = document.getElementById('wave-form');
+  const tbody = document.querySelector('#wave-table tbody');
+  const status = document.getElementById('wave-status');
+
+  function renderSchedule(schedule) {
+    tbody.innerHTML = '';
+    schedule.forEach(item => {
+      const row = document.createElement('tr');
+      row.dataset.participantId = item.participant_id;
+      row.innerHTML = `
+        <td>${item.participant_id}</td>
+        <td>${item.group}</td>
+        <td>${Math.floor(item.offset_seconds / 60)}:${String(item.offset_seconds % 60).padStart(2, '0')}</td>
+        <td class="small">waiting</td>
+      `;
+      tbody.appendChild(row);
+    });
+  }
+
+  function markGo(row) {
+    row.querySelector('td:last-child').textContent = 'GO';
+    row.style.background = '#fff0d2';
+  }
+
+  form.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const response = await fetch(form.action, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams(new FormData(form)),
+    });
+    const data = await response.json();
+    const schedule = data.schedule || [];
+    renderSchedule(schedule);
+    status.textContent = 'Wave started.';
+    const startAt = Date.now();
+    schedule.forEach(item => {
+      const delay = item.offset_seconds * 1000;
+      setTimeout(async () => {
+        const row = tbody.querySelector(`tr[data-participant-id="${item.participant_id}"]`);
+        if (row) {
+          markGo(row);
+        }
+        await fetch(`/race/{{ race.race_id }}/part/{{ race_part_id }}/submit-start/api`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: new URLSearchParams({ participant_id: item.participant_id }),
+        });
+        beep();
+      }, delay);
+    });
+  });
+</script>
+{% endblock %}

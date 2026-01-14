@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Submit End Times</h1>
+<div class="card">
+  <form id="end-form" method="post" action="/race/{{ race.race_id }}/part/{{ race_part_id }}/submit-end" data-async-submit="true" data-offline-queue="true" data-reset-on-success="true">
+    <label>
+      Participants or Groups (comma-separated)
+      <input type="text" name="targets" id="end-targets" required />
+    </label>
+    <label>
+      Time (HH:MM:SS or NOW)
+      <input type="text" name="time_value" value="NOW" required />
+    </label>
+    <button type="submit">Submit End</button>
+  </form>
+</div>
+<div class="card">
+  <h2>QR Scanner</h2>
+  <div id="qr-reader" style="width: 100%; max-width: 360px;"></div>
+  <p class="small">Keep scanning: each QR auto-submits with time NOW.</p>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://unpkg.com/html5-qrcode"></script>
+<script>
+  const qrElementId = 'qr-reader';
+  const targetInput = document.getElementById('end-targets');
+  const endForm = document.getElementById('end-form');
+
+  function handleScan(decodedText) {
+    targetInput.value = decodedText.trim();
+    submitFormAsync(endForm);
+  }
+
+  if (window.Html5Qrcode) {
+    const qr = new Html5Qrcode(qrElementId);
+    Html5Qrcode.getCameras().then((devices) => {
+      if (!devices || devices.length === 0) {
+        flashMessage('No camera found');
+        return;
+      }
+      qr.start(
+        devices[0].id,
+        { fps: 10, qrbox: 250 },
+        handleScan,
+        () => {}
+      );
+    }).catch(() => {
+      flashMessage('QR scanner unavailable');
+    });
+  }
+</script>
+{% endblock %}

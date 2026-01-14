@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Manage Organisers</h1>
+<div class="card">
+  <h2>Add Organiser</h2>
+  <form class="inline" method="post" action="/manage/organisers">
+    <label>
+      Username
+      <input type="text" name="username" required />
+    </label>
+    <label>
+      Password
+      <input type="password" name="password" required />
+    </label>
+    <label>
+      Race IDs (comma-separated)
+      <input type="text" name="race_ids" placeholder="Race A, Race B" />
+    </label>
+    <button type="submit">Create</button>
+  </form>
+</div>
+<div class="card">
+  <h2>Existing Organisers</h2>
+  <table class="table">
+    <thead>
+      <tr>
+        <th>Username</th>
+        <th>Race IDs</th>
+        <th>Update</th>
+        <th>Delete</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for organiser in organisers %}
+      <tr>
+        <td>{{ organiser.username }}</td>
+        <td>{{ organiser.races | map(attribute='race_id') | join(', ') }}</td>
+        <td>
+          <form method="post" action="/manage/organisers/{{ organiser.id }}/update">
+            <label>
+              New password (optional)
+              <input type="password" name="password" />
+            </label>
+            <label>
+              Race IDs (comma-separated)
+              <input type="text" name="race_ids" value="{{ organiser.races | map(attribute='race_id') | join(', ') }}" />
+            </label>
+            <button class="ghost" type="submit">Update</button>
+          </form>
+        </td>
+        <td>
+          <form method="post" action="/manage/organisers/{{ organiser.id }}/delete">
+            <button class="danger" type="submit">Delete</button>
+          </form>
+        </td>
+      </tr>
+      {% else %}
+      <tr>
+        <td colspan="4" class="small">No organisers yet.</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

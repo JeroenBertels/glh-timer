@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Manage Race Parts</h1>
+<div class="card">
+  <h2>Add Race Part</h2>
+  <form class="inline" method="post" action="/race/{{ race.race_id }}/manage/race-parts">
+    <label>
+      Race Part ID
+      <input type="text" name="race_part_id" required />
+    </label>
+    <label>
+      Order
+      <input type="number" name="race_order" required />
+    </label>
+    <button type="submit">Add</button>
+  </form>
+</div>
+<div class="card">
+  <div class="actions">
+    <a class="button ghost" href="/race/{{ race.race_id }}/manage/race-parts/csv">Download CSV</a>
+    <form method="post" action="/race/{{ race.race_id }}/manage/race-parts/csv" enctype="multipart/form-data">
+      <input type="file" name="file" accept=".csv" required />
+      <button type="submit" class="ghost">Upload CSV</button>
+    </form>
+  </div>
+  <p class="small">Overall is auto-generated and cannot be edited or deleted.</p>
+</div>
+<div class="card">
+  <table class="table">
+    <thead>
+      <tr>
+        <th>Race Part</th>
+        <th>Order</th>
+        <th>Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for part in race_parts %}
+      <tr>
+        <td>{{ part.race_part_id }}</td>
+        <td>{{ part.race_order }}</td>
+        <td class="actions">
+          {% if not part.is_overall %}
+            <a class="button ghost" href="/race/{{ race.race_id }}/manage/race-parts/{{ part.id }}/edit">Edit</a>
+            <form method="post" action="/race/{{ race.race_id }}/manage/race-parts/{{ part.id }}/delete">
+              <button class="danger" type="submit">Delete</button>
+            </form>
+          {% else %}
+            <span class="small">Locked</span>
+          {% endif %}
+        </td>
+      </tr>
+      {% else %}
+      <tr>
+        <td colspan="3" class="small">No race parts yet.</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

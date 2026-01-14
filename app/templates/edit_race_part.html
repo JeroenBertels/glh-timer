@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Edit Race Part</h1>
+<div class="card">
+  <form method="post" action="/race/{{ race_id }}/manage/race-parts/{{ part.id }}/edit">
+    <label>
+      Race Part ID
+      <input type="text" name="race_part_id" value="{{ part.race_part_id }}" {% if part.is_overall %}disabled{% endif %} required />
+    </label>
+    <label>
+      Order
+      <input type="number" name="race_order" value="{{ part.race_order }}" required />
+    </label>
+    <button type="submit">Save</button>
+  </form>
+</div>
+{% endblock %}
