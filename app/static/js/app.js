@@ -6,22 +6,37 @@ function flashMessage(message) {
   setTimeout(() => flash.classList.remove('show'), 1600);
 }
 
-function beep() {
+let audioContext = null;
+let audioUnlocked = false;
+
+function unlockAudio() {
   try {
     const AudioContext = window.AudioContext || window.webkitAudioContext;
-    const context = new AudioContext();
-    const oscillator = context.createOscillator();
-    oscillator.type = 'sine';
-    oscillator.frequency.value = 880;
-    oscillator.connect(context.destination);
-    oscillator.start();
-    setTimeout(() => {
-      oscillator.stop();
-      context.close();
-    }, 150);
+    if (!AudioContext) return;
+    if (!audioContext) {
+      audioContext = new AudioContext();
+    }
+    audioContext.resume();
+    audioUnlocked = true;
   } catch (err) {
-    // Audio might be blocked; fallback to flash only.
+    audioUnlocked = false;
   }
+}
+
+function beep() {
+  if (!audioUnlocked || !audioContext) return;
+  const now = audioContext.currentTime;
+  const oscillator = audioContext.createOscillator();
+  const gain = audioContext.createGain();
+  oscillator.type = 'sine';
+  oscillator.frequency.value = 880;
+  gain.gain.setValueAtTime(0.0001, now);
+  gain.gain.exponentialRampToValueAtTime(0.2, now + 0.01);
+  gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.15);
+  oscillator.connect(gain);
+  gain.connect(audioContext.destination);
+  oscillator.start(now);
+  oscillator.stop(now + 0.16);
 }
 
 function serializeForm(form) {
@@ -85,6 +100,9 @@ async function submitFormAsync(form) {
     if (form.dataset.resetOnSuccess === 'true') {
       form.reset();
     }
+    if (form.dataset.refreshOnSuccess === 'true') {
+      setTimeout(() => window.location.reload(), 400);
+    }
   } else {
     flashMessage('Submission failed');
   }
@@ -92,6 +110,9 @@ async function submitFormAsync(form) {
 
 window.addEventListener('online', flushQueue);
 window.addEventListener('load', flushQueue);
+document.addEventListener('click', unlockAudio, { once: true });
+document.addEventListener('touchstart', unlockAudio, { once: true });
+window.unlockAudio = unlockAudio;
 
 window.addEventListener('submit', (event) => {
   const form = event.target;

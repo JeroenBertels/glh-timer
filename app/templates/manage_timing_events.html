@@ -3,7 +3,7 @@
 <h1>Manage Timing Events</h1>
 <div class="card">
   <h2>Manual Entry</h2>
-  <form class="inline" method="post" action="/race/{{ race.race_id }}/part/{{ race_part_id }}/manage/timing-events">
+  <form class="inline" method="post" action="/race/{{ race.race_id }}/part/{{ race_part_id }}/manage/timing-events" data-async-submit="true" data-reset-on-success="true" data-refresh-on-success="true">
     <label>
       Participant ID
       <input type="number" name="participant_id" />

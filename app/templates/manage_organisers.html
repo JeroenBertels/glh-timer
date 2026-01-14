@@ -13,8 +13,12 @@
       <input type="password" name="password" required />
     </label>
     <label>
-      Race IDs (comma-separated)
-      <input type="text" name="race_ids" placeholder="Race A, Race B" />
+      Race IDs
+      <select name="race_ids" multiple required>
+        {% for race in races %}
+          <option value="{{ race.race_id }}">{{ race.race_id }}</option>
+        {% endfor %}
+      </select>
     </label>
     <button type="submit">Create</button>
   </form>
@@ -42,8 +46,12 @@
               <input type="password" name="password" />
             </label>
             <label>
-              Race IDs (comma-separated)
-              <input type="text" name="race_ids" value="{{ organiser.races | map(attribute='race_id') | join(', ') }}" />
+              Race IDs
+              <select name="race_ids" multiple required>
+                {% for race in races %}
+                  <option value="{{ race.race_id }}" {% if race.race_id in (organiser.races | map(attribute='race_id') | list) %}selected{% endif %}>{{ race.race_id }}</option>
+                {% endfor %}
+              </select>
             </label>
             <button class="ghost" type="submit">Update</button>
           </form>

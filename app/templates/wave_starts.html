@@ -7,7 +7,10 @@
       Participants or Groups (comma-separated)
       <input type="text" name="targets" required />
     </label>
-    <button type="submit">Start Wave Starts</button>
+    <div class="actions">
+      <button id="start-wave" type="submit">Start Wave Starts</button>
+      <button class="ghost" id="cancel-wave" type="button" disabled style="display: none;">Cancel</button>
+    </div>
   </form>
 </div>
 <div class="card">
@@ -31,6 +34,12 @@
   const form = document.getElementById('wave-form');
   const tbody = document.querySelector('#wave-table tbody');
   const status = document.getElementById('wave-status');
+  const startButton = document.getElementById('start-wave');
+  const cancelButton = document.getElementById('cancel-wave');
+  let waveRunning = false;
+  const scheduled = new Map();
+  let remainingStarts = 0;
+  let cancelMode = 'cancel';
 
   function renderSchedule(schedule) {
     tbody.innerHTML = '';
@@ -54,6 +63,10 @@
 
   form.addEventListener('submit', async (event) => {
     event.preventDefault();
+    if (waveRunning) {
+      status.textContent = 'Wave already running. Cancel to start a new one.';
+      return;
+    }
     const response = await fetch(form.action, {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -62,11 +75,22 @@
     const data = await response.json();
     const schedule = data.schedule || [];
     renderSchedule(schedule);
+    if (!schedule.length) {
+      status.textContent = 'No valid participants for wave start.';
+      return;
+    }
     status.textContent = 'Wave started.';
-    const startAt = Date.now();
+    waveRunning = true;
+    remainingStarts = schedule.length;
+    cancelMode = 'cancel';
+    startButton.disabled = true;
+    startButton.style.display = 'none';
+    cancelButton.disabled = false;
+    cancelButton.style.display = 'inline-flex';
+    cancelButton.textContent = 'Cancel';
     schedule.forEach(item => {
       const delay = item.offset_seconds * 1000;
-      setTimeout(async () => {
+      const timeoutId = setTimeout(async () => {
         const row = tbody.querySelector(`tr[data-participant-id="${item.participant_id}"]`);
         if (row) {
           markGo(row);
@@ -77,8 +101,37 @@
           body: new URLSearchParams({ participant_id: item.participant_id }),
         });
         beep();
+        remainingStarts -= 1;
+        if (remainingStarts <= 0) {
+          waveRunning = false;
+          cancelMode = 'clear';
+          status.textContent = 'Wave completed.';
+          cancelButton.textContent = 'Clear';
+        }
       }, delay);
+      scheduled.set(item.participant_id, timeoutId);
     });
+  });
+
+  cancelButton.addEventListener('click', () => {
+    if (cancelMode === 'clear') {
+      window.location.reload();
+      return;
+    }
+    if (!waveRunning) {
+      return;
+    }
+    for (const timeoutId of scheduled.values()) {
+      clearTimeout(timeoutId);
+    }
+    scheduled.clear();
+    waveRunning = false;
+    remainingStarts = 0;
+    startButton.disabled = false;
+    startButton.style.display = 'inline-flex';
+    cancelButton.disabled = true;
+    cancelButton.style.display = 'none';
+    status.textContent = 'Wave cancelled.';
   });
 </script>
 {% endblock %}

@@ -25,9 +25,11 @@
     </div>
   </header>
 
+  {% if back_url %}
   <div class="toolbar">
-    <button class="ghost" type="button" onclick="window.history.back()">Back</button>
+    <a class="button ghost" href="{{ back_url }}">{{ back_label }}</a>
   </div>
+  {% endif %}
 
   <main class="page">
     {% block content %}{% endblock %}

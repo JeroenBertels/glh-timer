@@ -16,18 +16,16 @@
     <thead>
       <tr>
         <th>Part</th>
-        <th>Order</th>
       </tr>
     </thead>
     <tbody>
       {% for part in race_parts %}
       <tr>
         <td><a href="/race/{{ race.race_id }}/part/{{ part.race_part_id }}">{{ part.race_part_id }}</a></td>
-        <td>{{ part.race_order }}</td>
       </tr>
       {% else %}
       <tr>
-        <td colspan="2" class="small">No race parts yet.</td>
+        <td class="small">No race parts yet.</td>
       </tr>
       {% endfor %}
     </tbody>

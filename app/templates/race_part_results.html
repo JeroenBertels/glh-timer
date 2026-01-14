@@ -5,7 +5,7 @@
   <form method="get" action="/race/{{ race.race_id }}/part/{{ race_part.race_part_id }}">
     <label>
       Group filter (multi-select)
-      <select name="group" multiple>
+      <select name="group" multiple size="4">
         {% for group in groups %}
           <option value="{{ group }}" {% if group in group_filters %}selected{% endif %}>{{ group }}</option>
         {% endfor %}
@@ -13,18 +13,21 @@
     </label>
     <label>
       Sex filter (multi-select)
-      <select name="sex" multiple>
+      <select name="sex" multiple size="3">
         {% for sex in sexes %}
           <option value="{{ sex }}" {% if sex in sex_filters %}selected{% endif %}>{{ sex }}</option>
         {% endfor %}
       </select>
     </label>
-    <button class="ghost" type="submit">Apply Filters</button>
+    <div class="actions">
+      <button class="ghost" type="submit">Apply Filters</button>
+      <a class="button ghost" href="/race/{{ race.race_id }}/part/{{ race_part.race_part_id }}">Clear Filters</a>
+    </div>
   </form>
 </div>
 <div class="card">
   <div class="actions">
-    {% if user and (user.role == "admin" or race.race_id in user.race_ids) %}
+    {% if user and (user.role == "admin" or race.race_id in user.race_ids) and not race_part.is_overall %}
       <a class="button" href="/race/{{ race.race_id }}/part/{{ race_part.race_part_id }}/manage/timing-events">Manage Timing Events</a>
       <a class="button" href="/race/{{ race.race_id }}/part/{{ race_part.race_part_id }}/submit-start">Submit Start Times</a>
       <a class="button" href="/race/{{ race.race_id }}/part/{{ race_part.race_part_id }}/submit-end">Submit End Times</a>

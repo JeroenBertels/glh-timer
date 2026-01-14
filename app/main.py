@@ -5,6 +5,7 @@ import io
 import json
 import zipfile
 from datetime import date, datetime
+import time
 from zoneinfo import ZoneInfo
 
 from fastapi import Depends, FastAPI, File, Form, HTTPException, Query, Request, UploadFile
@@ -39,12 +40,21 @@ templates.env.globals["format_seconds"] = format_seconds
 
 def init_db() -> None:
     engine = get_engine()
-    Base.metadata.create_all(bind=engine)
-    with SessionLocal() as db:
-        races = db.scalars(select(Race)).all()
-        for race in races:
-            ensure_overall_race_part(db, race.race_id)
-        db.commit()
+    last_error: Exception | None = None
+    for _ in range(10):
+        try:
+            Base.metadata.create_all(bind=engine)
+            with SessionLocal() as db:
+                races = db.scalars(select(Race)).all()
+                for race in races:
+                    ensure_overall_race_part(db, race.race_id)
+                db.commit()
+            return
+        except Exception as exc:  # pragma: no cover - startup retry
+            last_error = exc
+            time.sleep(1)
+    if last_error:
+        raise last_error
 
 
 @app.on_event("startup")
@@ -54,6 +64,12 @@ def on_startup() -> None:
 
 def current_user(request: Request) -> dict | None:
     return request.session.get("user")
+
+
+def back_context(url: str | None, label: str | None = None) -> dict:
+    if not url:
+        return {"back_url": None, "back_label": None}
+    return {"back_url": url, "back_label": label or "Back"}
 
 
 def require_admin(request: Request) -> None:
@@ -217,13 +233,21 @@ def home(request: Request, db: Session = Depends(get_db)):
     ]
     return templates.TemplateResponse(
         "home.html",
-        {"request": request, "races": race_rows, "user": current_user(request)},
+        {
+            "request": request,
+            "races": race_rows,
+            "user": current_user(request),
+            **back_context(None),
+        },
     )
 
 
 @app.get("/login", response_class=HTMLResponse)
 def login_form(request: Request):
-    return templates.TemplateResponse("login.html", {"request": request, "user": None})
+    return templates.TemplateResponse(
+        "login.html",
+        {"request": request, "user": None, **back_context("/", "< Races")},
+    )
 
 
 @app.post("/login")
@@ -258,6 +282,7 @@ def login_submit(
             "request": request,
             "user": None,
             "error": "Invalid credentials",
+            **back_context("/", "< Races"),
         },
         status_code=401,
     )
@@ -275,7 +300,12 @@ def manage_races(request: Request, db: Session = Depends(get_db)):
     races = db.scalars(select(Race).order_by(Race.race_date)).all()
     return templates.TemplateResponse(
         "manage_races.html",
-        {"request": request, "races": races, "user": current_user(request)},
+        {
+            "request": request,
+            "races": races,
+            "user": current_user(request),
+            **back_context("/", "< Races"),
+        },
     )
 
 
@@ -308,7 +338,12 @@ def edit_race(request: Request, race_id: str, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404)
     return templates.TemplateResponse(
         "edit_race.html",
-        {"request": request, "race": race, "user": current_user(request)},
+        {
+            "request": request,
+            "race": race,
+            "user": current_user(request),
+            **back_context("/manage/races", "< Manage Races"),
+        },
     )
 
 
@@ -418,6 +453,7 @@ def upload_races_csv(
             "preview": preview,
             "apply_url": "/manage/races/csv/apply",
             "payload": payload,
+            **back_context("/manage/races", "< Manage Races"),
         },
     )
 
@@ -459,6 +495,7 @@ def manage_organisers(request: Request, db: Session = Depends(get_db)):
             "organisers": organisers,
             "races": races,
             "user": current_user(request),
+            **back_context("/", "< Races"),
         },
     )
 
@@ -468,15 +505,14 @@ def create_organiser(
     request: Request,
     username: str = Form(...),
     password: str = Form(...),
-    race_ids: str = Form(""),
+    race_ids: list[str] = Form([]),
     db: Session = Depends(get_db),
 ):
     require_admin(request)
     organiser = Organiser(username=username.strip(), password_hash=hash_password(password))
     db.add(organiser)
     db.flush()
-    race_list = parse_comma_list(race_ids)
-    for race_id in race_list:
+    for race_id in race_ids:
         db.add(OrganiserRace(organiser_id=organiser.id, race_id=race_id))
     db.commit()
     return RedirectResponse("/manage/organisers", status_code=303)
@@ -487,7 +523,7 @@ def update_organiser(
     request: Request,
     organiser_id: int,
     password: str = Form(""),
-    race_ids: str = Form(""),
+    race_ids: list[str] = Form([]),
     db: Session = Depends(get_db),
 ):
     require_admin(request)
@@ -497,7 +533,7 @@ def update_organiser(
     if password:
         organiser.password_hash = hash_password(password)
     organiser.races.clear()
-    for race_id in parse_comma_list(race_ids):
+    for race_id in race_ids:
         organiser.races.append(OrganiserRace(race_id=race_id))
     db.commit()
     return RedirectResponse("/manage/organisers", status_code=303)
@@ -530,6 +566,7 @@ def race_detail(request: Request, race_id: str, db: Session = Depends(get_db)):
             "race": race,
             "race_parts": race_parts,
             "user": current_user(request),
+            **back_context("/", "< Races"),
         },
     )
 
@@ -552,6 +589,7 @@ def manage_race_parts(request: Request, race_id: str, db: Session = Depends(get_
             "race": race,
             "race_parts": race_parts,
             "user": current_user(request),
+            **back_context(f"/race/{race_id}", f"< {race_id}"),
         },
     )
 
@@ -596,7 +634,13 @@ def edit_race_part(request: Request, race_id: str, part_id: int, db: Session = D
         raise HTTPException(status_code=404)
     return templates.TemplateResponse(
         "edit_race_part.html",
-        {"request": request, "race_id": race_id, "part": part, "user": current_user(request)},
+        {
+            "request": request,
+            "race_id": race_id,
+            "part": part,
+            "user": current_user(request),
+            **back_context(f"/race/{race_id}/manage/race-parts", "< Manage Race Parts"),
+        },
     )
 
 
@@ -687,6 +731,7 @@ def upload_race_parts_csv(
             "preview": preview,
             "apply_url": f"/race/{race_id}/manage/race-parts/csv/apply",
             "payload": payload,
+            **back_context(f"/race/{race_id}/manage/race-parts", "< Manage Race Parts"),
         },
     )
 
@@ -738,6 +783,7 @@ def manage_participants(request: Request, race_id: str, db: Session = Depends(ge
             "race": race,
             "participants": participants,
             "user": current_user(request),
+            **back_context(f"/race/{race_id}", f"< {race_id}"),
         },
     )
 
@@ -784,6 +830,7 @@ def edit_participant(
             "race_id": race_id,
             "participant": participant,
             "user": current_user(request),
+            **back_context(f"/race/{race_id}/manage/participants", "< Manage Participants"),
         },
     )
 
@@ -907,6 +954,9 @@ def upload_participants_csv(
             "preview": preview,
             "apply_url": f"/race/{race_id}/manage/participants/csv/apply",
             "payload": payload,
+            **back_context(
+                f"/race/{race_id}/manage/participants", "< Manage Participants"
+            ),
         },
     )
 
@@ -988,6 +1038,7 @@ def race_part_results(
             "groups": groups,
             "sexes": sexes,
             "user": current_user(request),
+            **back_context(f"/race/{race_id}", f"< {race_id}"),
         },
     )
 
@@ -999,6 +1050,13 @@ def manage_timing_events(
     require_organiser(request, race_id)
     race = db.get(Race, race_id)
     if not race:
+        raise HTTPException(status_code=404)
+    part = db.scalar(
+        select(RacePart).where(
+            RacePart.race_id == race_id, RacePart.race_part_id == race_part_id
+        )
+    )
+    if not part or part.is_overall:
         raise HTTPException(status_code=404)
     events = db.scalars(
         select(TimingEvent)
@@ -1013,6 +1071,7 @@ def manage_timing_events(
             "race_part_id": race_part_id,
             "events": events,
             "user": current_user(request),
+            **back_context(f"/race/{race_id}/part/{race_part_id}", f"< {race_part_id} Results"),
         },
     )
 
@@ -1033,6 +1092,13 @@ def edit_timing_event(
     event = db.get(TimingEvent, event_id)
     if not race or not event:
         raise HTTPException(status_code=404)
+    part = db.scalar(
+        select(RacePart).where(
+            RacePart.race_id == race_id, RacePart.race_part_id == race_part_id
+        )
+    )
+    if not part or part.is_overall:
+        raise HTTPException(status_code=404)
     duration_value = format_seconds(event.duration_seconds) if event.duration_seconds else ""
     start_value = event.start_time.astimezone(race_timezone(race)).strftime("%H:%M:%S") if event.start_time else ""
     end_value = event.end_time.astimezone(race_timezone(race)).strftime("%H:%M:%S") if event.end_time else ""
@@ -1047,6 +1113,10 @@ def edit_timing_event(
             "start_value": start_value,
             "end_value": end_value,
             "user": current_user(request),
+            **back_context(
+                f"/race/{race_id}/part/{race_part_id}/manage/timing-events",
+                "< Manage Timing Events",
+            ),
         },
     )
 
@@ -1068,6 +1138,13 @@ def update_timing_event(
     race = db.get(Race, race_id)
     event = db.get(TimingEvent, event_id)
     if not race or not event:
+        raise HTTPException(status_code=404)
+    part = db.scalar(
+        select(RacePart).where(
+            RacePart.race_id == race_id, RacePart.race_part_id == race_part_id
+        )
+    )
+    if not part or part.is_overall:
         raise HTTPException(status_code=404)
     provided = [value for value in [duration, start_time, end_time] if value]
     if len(provided) != 1:
@@ -1129,6 +1206,13 @@ def create_timing_event_manual(
     race = db.get(Race, race_id)
     if not race:
         raise HTTPException(status_code=404)
+    part = db.scalar(
+        select(RacePart).where(
+            RacePart.race_id == race_id, RacePart.race_part_id == race_part_id
+        )
+    )
+    if not part or part.is_overall:
+        raise HTTPException(status_code=404)
     if not participant_id and not group:
         raise HTTPException(status_code=400, detail="Participant or group required")
     if participant_id and group:
@@ -1166,6 +1250,13 @@ def delete_timing_event(
     db: Session = Depends(get_db),
 ):
     require_organiser(request, race_id)
+    part = db.scalar(
+        select(RacePart).where(
+            RacePart.race_id == race_id, RacePart.race_part_id == race_part_id
+        )
+    )
+    if not part or part.is_overall:
+        raise HTTPException(status_code=404)
     event = db.get(TimingEvent, event_id)
     if event:
         db.delete(event)
@@ -1181,6 +1272,13 @@ def download_timing_events_csv(
     request: Request, race_id: str, race_part_id: str, db: Session = Depends(get_db)
 ):
     require_organiser(request, race_id)
+    part = db.scalar(
+        select(RacePart).where(
+            RacePart.race_id == race_id, RacePart.race_part_id == race_part_id
+        )
+    )
+    if not part or part.is_overall:
+        raise HTTPException(status_code=404)
     output = io.StringIO()
     writer = csv.writer(output)
     writer.writerow(
@@ -1237,6 +1335,13 @@ def upload_timing_events_csv(
     db: Session = Depends(get_db),
 ):
     require_organiser(request, race_id)
+    part = db.scalar(
+        select(RacePart).where(
+            RacePart.race_id == race_id, RacePart.race_part_id == race_part_id
+        )
+    )
+    if not part or part.is_overall:
+        raise HTTPException(status_code=404)
     contents = file.file.read().decode("utf-8")
     reader = csv.DictReader(io.StringIO(contents))
     incoming_rows = []
@@ -1289,6 +1394,10 @@ def upload_timing_events_csv(
             "preview": preview,
             "apply_url": f"/race/{race_id}/part/{race_part_id}/manage/timing-events/csv/apply",
             "payload": payload,
+            **back_context(
+                f"/race/{race_id}/part/{race_part_id}/manage/timing-events",
+                "< Manage Timing Events",
+            ),
         },
     )
 
@@ -1304,6 +1413,13 @@ def apply_timing_events_csv(
     require_organiser(request, race_id)
     race = db.get(Race, race_id)
     if not race:
+        raise HTTPException(status_code=404)
+    part = db.scalar(
+        select(RacePart).where(
+            RacePart.race_id == race_id, RacePart.race_part_id == race_part_id
+        )
+    )
+    if not part or part.is_overall:
         raise HTTPException(status_code=404)
     preview = json.loads(payload)
     tz = race_timezone(race)
@@ -1355,6 +1471,13 @@ def submit_start_form(request: Request, race_id: str, race_part_id: str, db: Ses
     race = db.get(Race, race_id)
     if not race:
         raise HTTPException(status_code=404)
+    part = db.scalar(
+        select(RacePart).where(
+            RacePart.race_id == race_id, RacePart.race_part_id == race_part_id
+        )
+    )
+    if not part or part.is_overall:
+        raise HTTPException(status_code=404)
     return templates.TemplateResponse(
         "submit_start.html",
         {
@@ -1362,6 +1485,7 @@ def submit_start_form(request: Request, race_id: str, race_part_id: str, db: Ses
             "race": race,
             "race_part_id": race_part_id,
             "user": current_user(request),
+            **back_context(f"/race/{race_id}/part/{race_part_id}", f"< {race_part_id} Results"),
         },
     )
 
@@ -1378,6 +1502,13 @@ def submit_start(
     require_organiser(request, race_id)
     race = db.get(Race, race_id)
     if not race:
+        raise HTTPException(status_code=404)
+    part = db.scalar(
+        select(RacePart).where(
+            RacePart.race_id == race_id, RacePart.race_part_id == race_part_id
+        )
+    )
+    if not part or part.is_overall:
         raise HTTPException(status_code=404)
     server_now = datetime.now(tz=race_timezone(race))
     start_dt = parse_time_field(time_value, race, server_now)
@@ -1420,6 +1551,13 @@ def wave_starts_form(
     race = db.get(Race, race_id)
     if not race:
         raise HTTPException(status_code=404)
+    part = db.scalar(
+        select(RacePart).where(
+            RacePart.race_id == race_id, RacePart.race_part_id == race_part_id
+        )
+    )
+    if not part or part.is_overall:
+        raise HTTPException(status_code=404)
     return templates.TemplateResponse(
         "wave_starts.html",
         {
@@ -1427,6 +1565,10 @@ def wave_starts_form(
             "race": race,
             "race_part_id": race_part_id,
             "user": current_user(request),
+            **back_context(
+                f"/race/{race_id}/part/{race_part_id}/submit-start",
+                "< Submit Start Times",
+            ),
         },
     )
 
@@ -1442,6 +1584,13 @@ def wave_starts_data(
     require_organiser(request, race_id)
     race = db.get(Race, race_id)
     if not race:
+        raise HTTPException(status_code=404)
+    part = db.scalar(
+        select(RacePart).where(
+            RacePart.race_id == race_id, RacePart.race_part_id == race_part_id
+        )
+    )
+    if not part or part.is_overall:
         raise HTTPException(status_code=404)
     target_list = parse_comma_list(targets)
     participants = db.scalars(
@@ -1498,6 +1647,13 @@ def submit_start_api(
     race = db.get(Race, race_id)
     if not race:
         raise HTTPException(status_code=404)
+    part = db.scalar(
+        select(RacePart).where(
+            RacePart.race_id == race_id, RacePart.race_part_id == race_part_id
+        )
+    )
+    if not part or part.is_overall:
+        raise HTTPException(status_code=404)
     server_now = datetime.now(tz=race_timezone(race))
     create_timing_event(
         db,
@@ -1520,6 +1676,13 @@ def submit_end_form(request: Request, race_id: str, race_part_id: str, db: Sessi
     race = db.get(Race, race_id)
     if not race:
         raise HTTPException(status_code=404)
+    part = db.scalar(
+        select(RacePart).where(
+            RacePart.race_id == race_id, RacePart.race_part_id == race_part_id
+        )
+    )
+    if not part or part.is_overall:
+        raise HTTPException(status_code=404)
     return templates.TemplateResponse(
         "submit_end.html",
         {
@@ -1527,6 +1690,7 @@ def submit_end_form(request: Request, race_id: str, race_part_id: str, db: Sessi
             "race": race,
             "race_part_id": race_part_id,
             "user": current_user(request),
+            **back_context(f"/race/{race_id}/part/{race_part_id}", f"< {race_part_id} Results"),
         },
     )
 
@@ -1543,6 +1707,13 @@ def submit_end(
     require_organiser(request, race_id)
     race = db.get(Race, race_id)
     if not race:
+        raise HTTPException(status_code=404)
+    part = db.scalar(
+        select(RacePart).where(
+            RacePart.race_id == race_id, RacePart.race_part_id == race_part_id
+        )
+    )
+    if not part or part.is_overall:
         raise HTTPException(status_code=404)
     server_now = datetime.now(tz=race_timezone(race))
     end_dt = parse_time_field(time_value, race, server_now)
@@ -1585,6 +1756,13 @@ def submit_duration_form(
     race = db.get(Race, race_id)
     if not race:
         raise HTTPException(status_code=404)
+    part = db.scalar(
+        select(RacePart).where(
+            RacePart.race_id == race_id, RacePart.race_part_id == race_part_id
+        )
+    )
+    if not part or part.is_overall:
+        raise HTTPException(status_code=404)
     return templates.TemplateResponse(
         "submit_duration.html",
         {
@@ -1592,6 +1770,7 @@ def submit_duration_form(
             "race": race,
             "race_part_id": race_part_id,
             "user": current_user(request),
+            **back_context(f"/race/{race_id}/part/{race_part_id}", f"< {race_part_id} Results"),
         },
     )
 
@@ -1608,6 +1787,13 @@ def submit_duration(
     require_organiser(request, race_id)
     race = db.get(Race, race_id)
     if not race:
+        raise HTTPException(status_code=404)
+    part = db.scalar(
+        select(RacePart).where(
+            RacePart.race_id == race_id, RacePart.race_part_id == race_part_id
+        )
+    )
+    if not part or part.is_overall:
         raise HTTPException(status_code=404)
     duration_seconds = parse_duration_field(duration)
     server_now = datetime.now(tz=race_timezone(race))
