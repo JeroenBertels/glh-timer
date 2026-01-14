@@ -3,6 +3,9 @@
 <h1>Manage Organisers</h1>
 <div class="card">
   <h2>Add Organiser</h2>
+  {% if error %}
+  <p class="small">{{ error }}</p>
+  {% endif %}
   <form class="inline" method="post" action="/manage/organisers">
     <label>
       Username
@@ -25,7 +28,8 @@
 </div>
 <div class="card">
   <h2>Existing Organisers</h2>
-  <table class="table">
+  <div class="table-wrap">
+    <table class="table">
     <thead>
       <tr>
         <th>Username</th>
@@ -68,6 +72,7 @@
       </tr>
       {% endfor %}
     </tbody>
-  </table>
+    </table>
+  </div>
 </div>
 {% endblock %}

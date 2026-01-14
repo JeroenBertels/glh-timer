@@ -36,47 +36,102 @@
   </div>
 </div>
 <div class="card">
-  <table class="table">
+  {% set extra_cols = (parts | rejectattr('is_overall') | list | length) if race_part.is_overall else 0 %}
+  {% set colspan_count = 5 + extra_cols %}
+  <div class="table-wrap">
+    <table class="table">
     <thead>
       <tr>
+        <th>#</th>
         <th>Bib</th>
         <th>Name</th>
         <th>Group</th>
-        <th>Time</th>
         {% if race_part.is_overall %}
           {% for part in parts if not part.is_overall %}
             <th>{{ part.race_part_id }}</th>
           {% endfor %}
+          <th>Overall</th>
+        {% else %}
+          <th>Time</th>
         {% endif %}
       </tr>
     </thead>
-    <tbody>
+    <tbody id="results-body">
       {% for row in rows %}
       <tr>
+        <td>{{ row.position }}</td>
         <td>{{ row.bib }}</td>
         <td>{{ row.name }}</td>
         <td>{{ row.group }}</td>
-        <td>{{ row.duration }}</td>
         {% if race_part.is_overall %}
           {% for part in parts if not part.is_overall %}
             <td>{{ row.parts[part.race_part_id] }}</td>
           {% endfor %}
+          <td>{{ row.duration }}</td>
+        {% else %}
+          <td>{{ row.duration }}</td>
         {% endif %}
       </tr>
       {% else %}
       <tr>
-        <td colspan="6" class="small">No results yet.</td>
+        <td colspan="{{ colspan_count }}" class="small">No results yet.</td>
       </tr>
       {% endfor %}
     </tbody>
-  </table>
+    </table>
+  </div>
 </div>
 {% endblock %}
 
 {% block scripts %}
 <script>
-  setInterval(() => {
-    window.location.reload();
-  }, 5000);
+  const resultsBody = document.getElementById('results-body');
+  const isOverall = {{ 'true' if race_part.is_overall else 'false' }};
+  const partIds = {{ parts | rejectattr('is_overall') | map(attribute='race_part_id') | list | tojson }};
+  const columnCount = isOverall ? 5 + partIds.length : 5;
+
+  function buildRow(row) {
+    const cells = [
+      `<td>${row.position || ''}</td>`,
+      `<td>${row.bib}</td>`,
+      `<td>${row.name}</td>`,
+      `<td>${row.group}</td>`,
+    ];
+    if (isOverall) {
+      partIds.forEach((partId) => {
+        const value = row.parts && row.parts[partId] ? row.parts[partId] : '';
+        cells.push(`<td>${value}</td>`);
+      });
+      cells.push(`<td>${row.duration}</td>`);
+    } else {
+      cells.push(`<td>${row.duration}</td>`);
+    }
+    return `<tr>${cells.join('')}</tr>`;
+  }
+
+  async function refreshResults() {
+    const url = new URL(window.location.href);
+    url.searchParams.set('format', 'json');
+    try {
+      const response = await fetch(url.toString(), {
+        headers: { 'X-Requested-With': 'fetch' },
+      });
+      if (!response.ok) {
+        return;
+      }
+      const data = await response.json();
+      const rows = data.rows || [];
+      if (!rows.length) {
+        resultsBody.innerHTML = `<tr><td colspan="${columnCount}" class="small">No results yet.</td></tr>`;
+        return;
+      }
+      resultsBody.innerHTML = rows.map(buildRow).join('');
+    } catch (error) {
+      // Keep current table if refresh fails.
+    }
+  }
+
+  refreshResults();
+  setInterval(refreshResults, 5000);
 </script>
 {% endblock %}

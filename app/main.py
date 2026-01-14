@@ -9,10 +9,11 @@ import time
 from zoneinfo import ZoneInfo
 
 from fastapi import Depends, FastAPI, File, Form, HTTPException, Query, Request, UploadFile
-from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from starlette.middleware.sessions import SessionMiddleware
 
@@ -208,6 +209,7 @@ def build_results(
             "group": participant.group,
             "sex": participant.sex,
             "duration": format_seconds(duration) if duration is not None else "DNF",
+            "duration_seconds": duration,
         }
         if race_part.is_overall:
             per_part = {}
@@ -220,6 +222,19 @@ def build_results(
                 )
             row["parts"] = per_part
         rows.append(row)
+    rows.sort(
+        key=lambda item: (
+            item["duration_seconds"] is None,
+            item["duration_seconds"] or 0,
+        )
+    )
+    position = 1
+    for row in rows:
+        if row["duration_seconds"] is None:
+            row["position"] = None
+        else:
+            row["position"] = position
+            position += 1
     return rows
 
 
@@ -324,7 +339,21 @@ def create_race(
         race_timezone=race_timezone.strip(),
     )
     db.add(race)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        races = db.scalars(select(Race).order_by(Race.race_date)).all()
+        return templates.TemplateResponse(
+            "manage_races.html",
+            {
+                "request": request,
+                "races": races,
+                "user": current_user(request),
+                "error": f"Race ID already exists: {race_id}",
+                **back_context("/", "< Races"),
+            },
+        )
     ensure_overall_race_part(db, race.race_id)
     db.commit()
     return RedirectResponse("/manage/races", status_code=303)
@@ -511,7 +540,23 @@ def create_organiser(
     require_admin(request)
     organiser = Organiser(username=username.strip(), password_hash=hash_password(password))
     db.add(organiser)
-    db.flush()
+    try:
+        db.flush()
+    except IntegrityError:
+        db.rollback()
+        organisers = db.scalars(select(Organiser).order_by(Organiser.username)).all()
+        races = db.scalars(select(Race).order_by(Race.race_date)).all()
+        return templates.TemplateResponse(
+            "manage_organisers.html",
+            {
+                "request": request,
+                "organisers": organisers,
+                "races": races,
+                "user": current_user(request),
+                "error": f"Organiser username already exists: {username}",
+                **back_context("/", "< Races"),
+            },
+        )
     for race_id in race_ids:
         db.add(OrganiserRace(organiser_id=organiser.id, race_id=race_id))
     db.commit()
@@ -610,7 +655,27 @@ def create_race_part(
         is_overall=False,
     )
     db.add(part)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        race = db.get(Race, race_id)
+        race_parts = db.scalars(
+            select(RacePart)
+            .where(RacePart.race_id == race_id)
+            .order_by(RacePart.is_overall, RacePart.race_order)
+        ).all()
+        return templates.TemplateResponse(
+            "manage_race_parts.html",
+            {
+                "request": request,
+                "race": race,
+                "race_parts": race_parts,
+                "user": current_user(request),
+                "error": f"Race part already exists: {race_part_id}",
+                **back_context(f"/race/{race_id}", f"< {race_id}"),
+            },
+        )
     ensure_overall_race_part(db, race_id)
     db.commit()
     return RedirectResponse(f"/race/{race_id}/manage/race-parts", status_code=303)
@@ -811,7 +876,27 @@ def create_participant(
         sex=sex.strip(),
     )
     db.add(participant)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        race = db.get(Race, race_id)
+        participants = db.scalars(
+            select(Participant)
+            .where(Participant.race_id == race_id)
+            .order_by(Participant.participant_id)
+        ).all()
+        return templates.TemplateResponse(
+            "manage_participants.html",
+            {
+                "request": request,
+                "race": race,
+                "participants": participants,
+                "user": current_user(request),
+                "error": f"Participant bib already exists: {participant_id}",
+                **back_context(f"/race/{race_id}", f"< {race_id}"),
+            },
+        )
     return RedirectResponse(f"/race/{race_id}/manage/participants", status_code=303)
 
 
@@ -1025,6 +1110,9 @@ def race_part_results(
     ).all()
     groups = sorted({p.group for p in race.participants})
     sexes = sorted({p.sex for p in race.participants if p.sex})
+    if request.query_params.get("format") == "json":
+        non_overall_ids = [part.race_part_id for part in parts if not part.is_overall]
+        return JSONResponse({"rows": rows, "part_ids": non_overall_ids})
     return templates.TemplateResponse(
         "race_part_results.html",
         {

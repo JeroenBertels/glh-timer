@@ -6,10 +6,10 @@ import os
 
 
 class Settings(BaseModel):
-    database_url: str = os.getenv("DATABASE_URL", "postgresql+psycopg2://postgres:postgres@db:5432/glh_timer")
-    admin_username: str = os.getenv("ADMIN_USERNAME", "admin")
-    admin_password: str = os.getenv("ADMIN_PASSWORD", "admin")
-    secret_key: str = os.getenv("SECRET_KEY", "change-me")
+    database_url: str = os.getenv("DATABASE_URL", None)
+    admin_username: str = os.getenv("ADMIN_USERNAME", None)
+    admin_password: str = os.getenv("ADMIN_PASSWORD", None)
+    secret_key: str = os.getenv("SECRET_KEY", None)
 
 
 @lru_cache

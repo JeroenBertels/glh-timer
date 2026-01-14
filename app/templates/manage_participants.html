@@ -3,6 +3,9 @@
 <h1>Manage Participants</h1>
 <div class="card">
   <h2>Add Participant</h2>
+  {% if error %}
+  <p class="small">{{ error }}</p>
+  {% endif %}
   <form class="inline" method="post" action="/race/{{ race.race_id }}/manage/participants">
     <label>
       Bib
@@ -35,13 +38,16 @@
   <div class="actions">
     <a class="button ghost" href="/race/{{ race.race_id }}/manage/participants/csv">Download CSV</a>
     <form method="post" action="/race/{{ race.race_id }}/manage/participants/csv" enctype="multipart/form-data">
-      <input type="file" name="file" accept=".csv" required />
-      <button type="submit" class="ghost">Upload CSV</button>
+      <label class="button ghost file-button">
+        Upload CSV
+        <input type="file" name="file" accept=".csv" required class="file-input" onchange="this.form.submit()" />
+      </label>
     </form>
   </div>
 </div>
 <div class="card">
-  <table class="table">
+  <div class="table-wrap">
+    <table class="table">
     <thead>
       <tr>
         <th>Bib</th>
@@ -73,6 +79,7 @@
       </tr>
       {% endfor %}
     </tbody>
-  </table>
+    </table>
+  </div>
 </div>
 {% endblock %}

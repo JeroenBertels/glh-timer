@@ -70,19 +70,32 @@
     startButton.disabled = true;
     qrStatus.textContent = 'Starting camera…';
     try {
-      const devices = await Html5Qrcode.getCameras();
-      if (!devices || devices.length === 0) {
-        qrStatus.textContent = 'No camera found.';
-        startButton.disabled = false;
-        return;
-      }
       qrInstance = new Html5Qrcode(qrElementId);
-      await qrInstance.start(
-        devices[0].id,
-        { fps: 10, qrbox: 250 },
-        handleScan,
-        () => {}
-      );
+      try {
+        await qrInstance.start(
+          { facingMode: 'environment' },
+          { fps: 10, qrbox: 250 },
+          handleScan,
+          () => {}
+        );
+      } catch (envError) {
+        const devices = await Html5Qrcode.getCameras();
+        if (!devices || devices.length === 0) {
+          qrStatus.textContent = 'No camera found.';
+          startButton.disabled = false;
+          return;
+        }
+        const backDevice =
+          devices.find((device) =>
+            /back|rear|environment/i.test(device.label || '')
+          ) || devices[devices.length - 1];
+        await qrInstance.start(
+          backDevice.id,
+          { fps: 10, qrbox: 250 },
+          handleScan,
+          () => {}
+        );
+      }
       qrStatus.textContent = 'Camera running. Ready to scan.';
     } catch (error) {
       qrStatus.textContent = 'Unable to start camera.';
