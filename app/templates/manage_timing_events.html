@@ -1,0 +1,86 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Manage Timing Events</h1>
+<div class="card">
+  <h2>Manual Entry</h2>
+  <form class="inline" method="post" action="/race/{{ race.race_id }}/part/{{ race_part_id }}/manage/timing-events" data-async-submit="true" data-reset-on-success="true" data-refresh-on-success="true">
+    <label>
+      Participant ID
+      <input type="number" name="participant_id" />
+    </label>
+    <label>
+      Group
+      <input type="text" name="group" />
+    </label>
+    <label>
+      Duration (MM:SS or HH:MM:SS)
+      <input type="text" name="duration" />
+    </label>
+    <label>
+      Start Time (HH:MM:SS or NOW)
+      <input type="text" name="start_time" />
+    </label>
+    <label>
+      End Time (HH:MM:SS or NOW)
+      <input type="text" name="end_time" />
+    </label>
+    <button type="submit">Add</button>
+  </form>
+</div>
+<div class="card">
+  <div class="actions">
+    <a class="button ghost" href="/race/{{ race.race_id }}/part/{{ race_part_id }}/manage/timing-events/csv">Download CSV</a>
+    <form method="post" action="/race/{{ race.race_id }}/part/{{ race_part_id }}/manage/timing-events/csv" enctype="multipart/form-data">
+      <label class="button ghost file-button">
+        Upload CSV
+        <input type="file" name="file" accept=".csv" required class="file-input" onchange="this.form.submit()" />
+      </label>
+    </form>
+  </div>
+</div>
+<div class="card">
+  <div class="table-wrap">
+    <table class="table">
+    <thead>
+      <tr>
+        <th>ID</th>
+        <th>Bib</th>
+        <th>Group</th>
+        <th>Duration</th>
+        <th>Start</th>
+        <th>End</th>
+        <th>Server Time</th>
+        <th>Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for event in events %}
+      <tr>
+        <td>{{ event.id }}</td>
+        <td>{{ event.participant_id }}</td>
+        <td>{{ event.group }}</td>
+        <td>
+          {% if event.duration_seconds is not none %}
+            {{ format_seconds(event.duration_seconds) }}
+          {% endif %}
+        </td>
+        <td>{{ event.start_time }}</td>
+        <td>{{ event.end_time }}</td>
+        <td>{{ event.server_time }}</td>
+        <td class="actions">
+          <a class="button ghost" href="/race/{{ race.race_id }}/part/{{ race_part_id }}/manage/timing-events/{{ event.id }}/edit">Edit</a>
+          <form method="post" action="/race/{{ race.race_id }}/part/{{ race_part_id }}/manage/timing-events/{{ event.id }}/delete">
+            <button class="danger" type="submit">Delete</button>
+          </form>
+        </td>
+      </tr>
+      {% else %}
+      <tr>
+        <td colspan="8" class="small">No timing events yet.</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

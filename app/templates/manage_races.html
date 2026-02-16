@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Manage Races</h1>
+<div class="card">
+  <h2>Add Race</h2>
+  {% if error %}
+  <p class="small">{{ error }}</p>
+  {% endif %}
+  <form class="inline" method="post" action="/manage/races">
+    <label>
+      Race ID
+      <input type="text" name="race_id" required />
+    </label>
+    <label>
+      Date
+      <input type="date" name="race_date" required />
+    </label>
+    <label>
+      Timezone
+      <input type="text" name="race_timezone" value="Europe/Brussels" required />
+    </label>
+    <button type="submit">Add</button>
+  </form>
+</div>
+<div class="card">
+  <div class="actions">
+    <a class="button ghost" href="/manage/races/csv">Download CSV</a>
+    <form method="post" action="/manage/races/csv" enctype="multipart/form-data">
+      <label class="button ghost file-button">
+        Upload CSV
+        <input type="file" name="file" accept=".csv" required class="file-input" onchange="this.form.submit()" />
+      </label>
+    </form>
+  </div>
+</div>
+<div class="card">
+  <div class="table-wrap">
+    <table class="table">
+    <thead>
+      <tr>
+        <th>Race</th>
+        <th>Date</th>
+        <th>Timezone</th>
+        <th>Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for race in races %}
+      <tr>
+        <td>{{ race.race_id }}</td>
+        <td>{{ race.race_date }}</td>
+        <td>{{ race.race_timezone }}</td>
+        <td class="actions">
+          <a class="button ghost" href="/manage/races/{{ race.race_id }}/edit">Edit</a>
+          <form method="post" action="/manage/races/{{ race.race_id }}/delete">
+            <button class="danger" type="submit">Delete</button>
+          </form>
+        </td>
+      </tr>
+      {% else %}
+      <tr>
+        <td colspan="4" class="small">No races yet.</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

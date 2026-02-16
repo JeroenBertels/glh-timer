@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Edit Participant</h1>
+<div class="card">
+  <form method="post" action="/race/{{ race_id }}/manage/participants/{{ participant.id }}/edit">
+    <label>
+      Bib
+      <input type="number" name="participant_id" value="{{ participant.participant_id }}" required />
+    </label>
+    <label>
+      First name
+      <input type="text" name="first_name" value="{{ participant.first_name }}" required />
+    </label>
+    <label>
+      Last name
+      <input type="text" name="last_name" value="{{ participant.last_name }}" required />
+    </label>
+    <label>
+      Group
+      <input type="text" name="group" value="{{ participant.group }}" required />
+    </label>
+    <label>
+      Club
+      <input type="text" name="club" value="{{ participant.club }}" />
+    </label>
+    <label>
+      Sex
+      <input type="text" name="sex" value="{{ participant.sex }}" />
+    </label>
+    <button type="submit">Save</button>
+  </form>
+</div>
+{% endblock %}

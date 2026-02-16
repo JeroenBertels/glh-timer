@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Manage Participants</h1>
+<div class="card">
+  <h2>Add Participant</h2>
+  {% if error %}
+  <p class="small">{{ error }}</p>
+  {% endif %}
+  <form class="inline" method="post" action="/race/{{ race.race_id }}/manage/participants">
+    <label>
+      Bib
+      <input type="number" name="participant_id" required />
+    </label>
+    <label>
+      First name
+      <input type="text" name="first_name" required />
+    </label>
+    <label>
+      Last name
+      <input type="text" name="last_name" required />
+    </label>
+    <label>
+      Group
+      <input type="text" name="group" required />
+    </label>
+    <label>
+      Club
+      <input type="text" name="club" />
+    </label>
+    <label>
+      Sex
+      <input type="text" name="sex" placeholder="F/M/X" />
+    </label>
+    <button type="submit">Add</button>
+  </form>
+</div>
+<div class="card">
+  <div class="actions">
+    <a class="button ghost" href="/race/{{ race.race_id }}/manage/participants/csv">Download CSV</a>
+    <form method="post" action="/race/{{ race.race_id }}/manage/participants/csv" enctype="multipart/form-data">
+      <label class="button ghost file-button">
+        Upload CSV
+        <input type="file" name="file" accept=".csv" required class="file-input" onchange="this.form.submit()" />
+      </label>
+    </form>
+  </div>
+</div>
+<div class="card">
+  <div class="table-wrap">
+    <table class="table">
+    <thead>
+      <tr>
+        <th>Bib</th>
+        <th>Name</th>
+        <th>Group</th>
+        <th>Club</th>
+        <th>Sex</th>
+        <th>Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for participant in participants %}
+      <tr>
+        <td>{{ participant.participant_id }}</td>
+        <td>{{ participant.first_name }} {{ participant.last_name }}</td>
+        <td>{{ participant.group }}</td>
+        <td>{{ participant.club }}</td>
+        <td>{{ participant.sex }}</td>
+        <td class="actions">
+          <a class="button ghost" href="/race/{{ race.race_id }}/manage/participants/{{ participant.id }}/edit">Edit</a>
+          <form method="post" action="/race/{{ race.race_id }}/manage/participants/{{ participant.id }}/delete">
+            <button class="danger" type="submit">Delete</button>
+          </form>
+        </td>
+      </tr>
+      {% else %}
+      <tr>
+        <td colspan="6" class="small">No participants yet.</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

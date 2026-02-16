@@ -1,0 +1,233 @@
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600&display=swap');
+
+:root {
+  --bg: #f5f3ef;
+  --card: #ffffff;
+  --ink: #1f2430;
+  --muted: #6b6f7a;
+  --accent: #f26b3a;
+  --border: #e6e2dc;
+  --flash: #ffe3a3;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: "Space Grotesk", "Trebuchet MS", sans-serif;
+  color: var(--ink);
+  background: radial-gradient(circle at top left, #fff7e8 0%, var(--bg) 35%, #eef1f6 100%);
+  min-height: 100vh;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+a:hover {
+  color: var(--accent);
+}
+
+.top-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.8);
+  backdrop-filter: blur(8px);
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+}
+
+.divider {
+  color: var(--muted);
+}
+
+.auth {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.toolbar {
+  padding: 12px 20px;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.page {
+  padding: 12px 20px 40px;
+}
+
+h1, h2, h3 {
+  margin: 0 0 12px;
+}
+
+.card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 16px;
+  margin-bottom: 16px;
+  box-shadow: 0 12px 30px rgba(30, 38, 59, 0.08);
+}
+
+.table {
+  width: max-content;
+  min-width: 100%;
+  border-collapse: collapse;
+  font-size: 0.95rem;
+}
+
+.table-wrap {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.table th,
+.table td {
+  text-align: left;
+  padding: 10px 8px;
+  border-bottom: 1px solid var(--border);
+}
+
+.badge {
+  display: inline-block;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: #edf1f8;
+  color: var(--muted);
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.badge.future {
+  background: #eaf6e8;
+  color: #2c6f33;
+}
+
+.badge.past {
+  background: #f9e7e7;
+  color: #9c2f2f;
+}
+
+.badge.ongoing {
+  background: #fff0d2;
+  color: #965200;
+}
+
+form {
+  display: grid;
+  gap: 12px;
+}
+
+label {
+  display: grid;
+  gap: 6px;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+input, select, button, textarea {
+  font: inherit;
+}
+
+input, select, textarea {
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: #fff;
+}
+
+button, .button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 999px;
+  padding: 10px 18px;
+  background: var(--accent);
+  color: #fff;
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 1rem;
+  line-height: 1;
+}
+
+.file-button {
+  position: relative;
+  overflow: hidden;
+}
+
+.file-input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  cursor: pointer;
+}
+
+button.ghost, .ghost {
+  background: transparent;
+  color: var(--ink);
+  border: 1px solid var(--border);
+}
+
+button.danger {
+  background: #b93131;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.small {
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.flash {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  padding: 12px 16px;
+  border-radius: 12px;
+  background: var(--flash);
+  color: #784f00;
+  opacity: 0;
+  transform: translateY(10px);
+  transition: all 0.2s ease;
+  pointer-events: none;
+}
+
+.flash.show {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+@media (min-width: 768px) {
+  .page {
+    max-width: 1100px;
+    margin: 0 auto;
+  }
+  form.inline {
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    align-items: end;
+  }
+}

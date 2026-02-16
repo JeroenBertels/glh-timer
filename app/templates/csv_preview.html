@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>{{ title }}</h1>
+<div class="card">
+  <p class="small">Review changes before applying. Missing rows are ignored.</p>
+  <form method="post" action="{{ apply_url }}">
+    <input type="hidden" name="payload" value='{{ payload | e }}' />
+    <button type="submit">Apply Changes</button>
+  </form>
+</div>
+<div class="card">
+  <h2>Added ({{ preview.added | length }})</h2>
+  <pre class="small">{{ preview.added | tojson(indent=2) }}</pre>
+</div>
+<div class="card">
+  <h2>Modified ({{ preview.modified | length }})</h2>
+  <pre class="small">{{ preview.modified | tojson(indent=2) }}</pre>
+</div>
+<div class="card">
+  <h2>Ignored ({{ preview.ignored | length }})</h2>
+  <pre class="small">{{ preview.ignored | tojson(indent=2) }}</pre>
+</div>
+{% endblock %}

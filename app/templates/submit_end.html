@@ -1,0 +1,108 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Submit End Times</h1>
+<div class="card">
+  <form id="end-form" method="post" action="/race/{{ race.race_id }}/part/{{ race_part_id }}/submit-end" data-async-submit="true" data-offline-queue="true" data-reset-on-success="true">
+    <label>
+      Participants or Groups (comma-separated)
+      <input type="text" name="targets" id="end-targets" required />
+    </label>
+    <label>
+      Time (HH:MM:SS or NOW)
+      <input type="text" name="time_value" value="NOW" required />
+    </label>
+    <button type="submit">Submit End</button>
+  </form>
+</div>
+<div class="card">
+  <h2>QR Scanner</h2>
+  <div class="actions">
+    <button class="ghost" id="start-camera" type="button">Start Camera</button>
+  </div>
+  <div id="qr-reader" style="width: 100%; max-width: 360px;"></div>
+  <p class="small" id="qr-status">Camera idle. Tap “Start Camera” to begin scanning.</p>
+  <p class="small">Keep scanning: each QR auto-submits with time NOW.</p>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://unpkg.com/html5-qrcode"></script>
+<script>
+  const qrElementId = 'qr-reader';
+  const targetInput = document.getElementById('end-targets');
+  const endForm = document.getElementById('end-form');
+  const startButton = document.getElementById('start-camera');
+  const qrStatus = document.getElementById('qr-status');
+  let qrInstance = null;
+  const scanCooldownMs = 5000;
+  const recentScans = new Map();
+
+  function handleScan(decodedText) {
+    const bib = decodedText.trim();
+    if (!bib) {
+      return;
+    }
+    const now = Date.now();
+    const lastScan = recentScans.get(bib);
+    if (lastScan && now - lastScan < scanCooldownMs) {
+      qrStatus.textContent = `Duplicate scan ignored for ${bib}.`;
+      return;
+    }
+    recentScans.set(bib, now);
+    for (const [key, timestamp] of recentScans.entries()) {
+      if (now - timestamp >= scanCooldownMs) {
+        recentScans.delete(key);
+      }
+    }
+    targetInput.value = bib;
+    submitFormAsync(endForm);
+    qrStatus.textContent = `Scanned ${bib}.`;
+  }
+
+  async function startCamera() {
+    if (window.unlockAudio) {
+      window.unlockAudio();
+    }
+    if (!window.Html5Qrcode) {
+      qrStatus.textContent = 'QR scanner unavailable in this browser.';
+      return;
+    }
+    startButton.disabled = true;
+    qrStatus.textContent = 'Starting camera…';
+    try {
+      qrInstance = new Html5Qrcode(qrElementId);
+      try {
+        await qrInstance.start(
+          { facingMode: 'environment' },
+          { fps: 10, qrbox: 250 },
+          handleScan,
+          () => {}
+        );
+      } catch (envError) {
+        const devices = await Html5Qrcode.getCameras();
+        if (!devices || devices.length === 0) {
+          qrStatus.textContent = 'No camera found.';
+          startButton.disabled = false;
+          return;
+        }
+        const backDevice =
+          devices.find((device) =>
+            /back|rear|environment/i.test(device.label || '')
+          ) || devices[devices.length - 1];
+        await qrInstance.start(
+          backDevice.id,
+          { fps: 10, qrbox: 250 },
+          handleScan,
+          () => {}
+        );
+      }
+      qrStatus.textContent = 'Camera running. Ready to scan.';
+    } catch (error) {
+      qrStatus.textContent = 'Unable to start camera.';
+      startButton.disabled = false;
+    }
+  }
+
+  startButton.addEventListener('click', startCamera);
+</script>
+{% endblock %}

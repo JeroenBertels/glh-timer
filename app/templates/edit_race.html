@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Edit Race</h1>
+<div class="card">
+  <form method="post" action="/manage/races/{{ race.race_id }}/edit">
+    <label>
+      Race ID
+      <input type="text" value="{{ race.race_id }}" disabled />
+    </label>
+    <label>
+      Date
+      <input type="date" name="race_date" value="{{ race.race_date }}" required />
+    </label>
+    <label>
+      Timezone
+      <input type="text" name="race_timezone" value="{{ race.race_timezone }}" required />
+    </label>
+    <button type="submit">Save</button>
+  </form>
+</div>
+{% endblock %}

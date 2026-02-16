@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>{{ title if title else "GLH Timer" }}</title>
+  <link rel="stylesheet" href="/static/css/styles.css" />
+</head>
+<body>
+  <header class="top-bar">
+    <div class="brand">
+      <a href="https://bertels.ai" target="_blank" rel="noopener noreferrer">bertels.ai</a>
+      <span class="divider">•</span>
+      <a href="/">GLH Timer</a>
+    </div>
+    <div class="auth">
+      {% if user %}
+        <span class="small">logged in as {{ user.role }}</span>
+        <form method="post" action="/logout">
+          <button class="button ghost" type="submit">Logout</button>
+        </form>
+      {% else %}
+        <a class="button ghost" href="/login">Log in</a>
+      {% endif %}
+    </div>
+  </header>
+
+  {% if back_url %}
+  <div class="toolbar">
+    <a class="button ghost" href="{{ back_url }}">{{ back_label }}</a>
+  </div>
+  {% endif %}
+
+  <main class="page">
+    {% block content %}{% endblock %}
+  </main>
+
+  <div id="flash" class="flash" aria-live="polite"></div>
+
+  <script src="/static/js/app.js"></script>
+  {% block scripts %}{% endblock %}
+</body>
+</html>
