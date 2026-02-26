@@ -8,10 +8,6 @@ Mobile-first timing app for Go Like Hell Triathlon Club.
 2. Install deps: `pip install -r requirements.txt` (or `pip install .`).
 3. Run: `uvicorn app.main:app --reload`.
 
-## Docker
-
-`docker compose up --build`
-
 ## CI/CD (GitHub Actions -> DockerHub)
 
 This repo now includes `.github/workflows/build-push-dockerhub.yml`.

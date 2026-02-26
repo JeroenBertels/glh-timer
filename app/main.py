@@ -1928,13 +1928,66 @@ def download_qr_codes(request: Request, race_id: str, db: Session = Depends(get_
         .order_by(Participant.participant_id)
     ).all()
     import qrcode
+    from PIL import Image, ImageDraw, ImageFilter, ImageFont
+
+    base_font = ImageFont.load_default()
+    text_scale = 3
+    supersample_factor = 4
+
+    def render_bold_label(text: str) -> Image.Image:
+        measurement_img = Image.new("L", (1, 1), 0)
+        measurement_draw = ImageDraw.Draw(measurement_img)
+        text_bbox = measurement_draw.textbbox((0, 0), text, font=base_font)
+        base_width = max(1, text_bbox[2] - text_bbox[0])
+        base_height = max(1, text_bbox[3] - text_bbox[1])
+
+        text_mask = Image.new("L", (base_width, base_height), 0)
+        text_draw = ImageDraw.Draw(text_mask)
+        text_draw.text((-text_bbox[0], -text_bbox[1]), text, fill=255, font=base_font)
+
+        high_res_mask = text_mask.resize(
+            (
+                base_width * text_scale * supersample_factor,
+                base_height * text_scale * supersample_factor,
+            ),
+            resample=Image.Resampling.NEAREST,
+        )
+        high_res_bold_mask = high_res_mask.filter(ImageFilter.MaxFilter(5))
+        bold_mask = high_res_bold_mask.resize(
+            (base_width * text_scale, base_height * text_scale),
+            resample=Image.Resampling.LANCZOS,
+        )
+
+        label_img = Image.new("RGB", bold_mask.size, "white")
+        label_img.paste((0, 0, 0), mask=bold_mask)
+        return label_img
 
     archive = io.BytesIO()
     with zipfile.ZipFile(archive, "w", zipfile.ZIP_DEFLATED) as zipf:
         for participant in participants:
-            qr = qrcode.make(str(participant.participant_id))
+            qr = qrcode.make(str(participant.participant_id)).convert("RGB")
+            participant_name = f"{participant.first_name} {participant.last_name}".strip()
+            participant_info = ", ".join(
+                [
+                    str(participant.participant_id),
+                    participant_name,
+                    participant.group or "",
+                ]
+            )
+            label_img = render_bold_label(participant_info)
+            text_width, text_height = label_img.size
+            padding = 12
+            canvas_width = max(qr.width, text_width + 2 * padding)
+            canvas_height = text_height + qr.height + 3 * padding
+            output = Image.new("RGB", (canvas_width, canvas_height), "white")
+            text_x = (canvas_width - text_width) // 2
+            text_y = padding
+            output.paste(label_img, (text_x, text_y))
+            qr_x = (canvas_width - qr.width) // 2
+            qr_y = text_y + text_height + padding
+            output.paste(qr, (qr_x, qr_y))
             img_bytes = io.BytesIO()
-            qr.save(img_bytes, format="PNG")
+            output.save(img_bytes, format="PNG")
             img_bytes.seek(0)
             filename = f"{participant.participant_id}.png"
             zipf.writestr(filename, img_bytes.getvalue())
