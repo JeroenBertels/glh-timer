@@ -67,6 +67,7 @@
         <td>{{ participant.club }}</td>
         <td>{{ participant.sex }}</td>
         <td class="actions">
+          <a class="button ghost" href="/race/{{ race.race_id }}/manage/participants/{{ participant.id }}/qrcode.png">Download QR Code</a>
           <a class="button ghost" href="/race/{{ race.race_id }}/manage/participants/{{ participant.id }}/edit">Edit</a>
           <form method="post" action="/race/{{ race.race_id }}/manage/participants/{{ participant.id }}/delete">
             <button class="danger" type="submit">Delete</button>

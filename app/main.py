@@ -1916,17 +1916,7 @@ def submit_duration(
     )
 
 
-@app.get("/race/{race_id}/qrcodes.zip", response_class=StreamingResponse)
-def download_qr_codes(request: Request, race_id: str, db: Session = Depends(get_db)):
-    require_organiser(request, race_id)
-    race = db.get(Race, race_id)
-    if not race:
-        raise HTTPException(status_code=404)
-    participants = db.scalars(
-        select(Participant)
-        .where(Participant.race_id == race_id)
-        .order_by(Participant.participant_id)
-    ).all()
+def build_participant_qr_png(participant: Participant) -> bytes:
     import qrcode
     from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
@@ -1962,35 +1952,79 @@ def download_qr_codes(request: Request, race_id: str, db: Session = Depends(get_
         label_img.paste((0, 0, 0), mask=bold_mask)
         return label_img
 
+    qr = qrcode.make(str(participant.participant_id)).convert("RGB")
+    participant_name = f"{participant.first_name} {participant.last_name}".strip()
+    participant_info = ", ".join(
+        [
+            str(participant.participant_id),
+            participant_name,
+            participant.group or "",
+        ]
+    )
+    label_img = render_bold_label(participant_info)
+    text_width, text_height = label_img.size
+    padding = 12
+    canvas_width = max(qr.width, text_width + 2 * padding)
+    canvas_height = text_height + qr.height + 3 * padding
+    output = Image.new("RGB", (canvas_width, canvas_height), "white")
+    text_x = (canvas_width - text_width) // 2
+    text_y = padding
+    output.paste(label_img, (text_x, text_y))
+    qr_x = (canvas_width - qr.width) // 2
+    qr_y = text_y + text_height + padding
+    output.paste(qr, (qr_x, qr_y))
+    img_bytes = io.BytesIO()
+    output.save(img_bytes, format="PNG")
+    img_bytes.seek(0)
+    return img_bytes.getvalue()
+
+
+@app.get(
+    "/race/{race_id}/manage/participants/{participant_pk}/qrcode.png",
+    response_class=StreamingResponse,
+)
+def download_participant_qr_code(
+    request: Request, race_id: str, participant_pk: int, db: Session = Depends(get_db)
+):
+    require_organiser(request, race_id)
+    participant = db.scalar(
+        select(Participant).where(
+            Participant.id == participant_pk,
+            Participant.race_id == race_id,
+        )
+    )
+    if not participant:
+        raise HTTPException(status_code=404)
+    image_data = build_participant_qr_png(participant)
+    return StreamingResponse(
+        io.BytesIO(image_data),
+        media_type="image/png",
+        headers={
+            "Content-Disposition": (
+                f"attachment; filename={race_id}-{participant.participant_id}-qrcode.png"
+            )
+        },
+    )
+
+
+@app.get("/race/{race_id}/qrcodes.zip", response_class=StreamingResponse)
+def download_qr_codes(request: Request, race_id: str, db: Session = Depends(get_db)):
+    require_organiser(request, race_id)
+    race = db.get(Race, race_id)
+    if not race:
+        raise HTTPException(status_code=404)
+    participants = db.scalars(
+        select(Participant)
+        .where(Participant.race_id == race_id)
+        .order_by(Participant.participant_id)
+    ).all()
+
     archive = io.BytesIO()
     with zipfile.ZipFile(archive, "w", zipfile.ZIP_DEFLATED) as zipf:
         for participant in participants:
-            qr = qrcode.make(str(participant.participant_id)).convert("RGB")
-            participant_name = f"{participant.first_name} {participant.last_name}".strip()
-            participant_info = ", ".join(
-                [
-                    str(participant.participant_id),
-                    participant_name,
-                    participant.group or "",
-                ]
-            )
-            label_img = render_bold_label(participant_info)
-            text_width, text_height = label_img.size
-            padding = 12
-            canvas_width = max(qr.width, text_width + 2 * padding)
-            canvas_height = text_height + qr.height + 3 * padding
-            output = Image.new("RGB", (canvas_width, canvas_height), "white")
-            text_x = (canvas_width - text_width) // 2
-            text_y = padding
-            output.paste(label_img, (text_x, text_y))
-            qr_x = (canvas_width - qr.width) // 2
-            qr_y = text_y + text_height + padding
-            output.paste(qr, (qr_x, qr_y))
-            img_bytes = io.BytesIO()
-            output.save(img_bytes, format="PNG")
-            img_bytes.seek(0)
+            image_data = build_participant_qr_png(participant)
             filename = f"{participant.participant_id}.png"
-            zipf.writestr(filename, img_bytes.getvalue())
+            zipf.writestr(filename, image_data)
     archive.seek(0)
     return StreamingResponse(
         archive,
