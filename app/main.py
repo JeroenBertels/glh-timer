@@ -12,7 +12,7 @@ from fastapi import Depends, FastAPI, File, Form, HTTPException, Query, Request,
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-from sqlalchemy import select
+from sqlalchemy import inspect, select, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from starlette.middleware.sessions import SessionMiddleware
@@ -45,6 +45,7 @@ def init_db() -> None:
     for _ in range(10):
         try:
             Base.metadata.create_all(bind=engine)
+            ensure_schema_updates(engine)
             with SessionLocal() as db:
                 races = db.scalars(select(Race)).all()
                 for race in races:
@@ -65,6 +66,14 @@ def on_startup() -> None:
 
 def current_user(request: Request) -> dict | None:
     return request.session.get("user")
+
+
+def current_username(request: Request) -> str:
+    user = current_user(request) or {}
+    username = user.get("username")
+    if not username:
+        raise HTTPException(status_code=403)
+    return str(username)
 
 
 def back_context(url: str | None, label: str | None = None) -> dict:
@@ -112,8 +121,38 @@ def ensure_overall_race_part(db: Session, race_id: str) -> None:
     db.add(overall)
 
 
+def ensure_schema_updates(engine) -> None:
+    inspector = inspect(engine)
+    if "timing_events" not in inspector.get_table_names():
+        return
+    columns = {column["name"] for column in inspector.get_columns("timing_events")}
+    if "created_by_username" in columns:
+        return
+    statement = text(
+        "ALTER TABLE timing_events ADD COLUMN created_by_username VARCHAR(150)"
+    )
+    try:
+        with engine.begin() as connection:
+            connection.execute(statement)
+    except Exception as exc:  # pragma: no cover - startup race tolerance
+        if "duplicate column" not in str(exc).lower():
+            raise
+
+
 def parse_comma_list(value: str) -> list[str]:
     return [item.strip() for item in value.split(",") if item.strip()]
+
+
+def wants_json_response(request: Request) -> bool:
+    accept = request.headers.get("accept", "")
+    requested_with = request.headers.get("x-requested-with", "")
+    return "application/json" in accept or requested_with == "XMLHttpRequest"
+
+
+def parse_target_token(token: str) -> tuple[int | None, str | None]:
+    if token.isdigit():
+        return int(token), None
+    return None, token
 
 
 def normalize_filter_values(values: list[str] | str | None) -> list[str]:
@@ -158,6 +197,37 @@ def group_name_error(group: str) -> str:
         f"Invalid group name '{display_value}'. Group names must start with a letter "
         "(for example: Open, M30, F10)."
     )
+
+
+def serialize_pending_end_event(event: TimingEvent, race: Race) -> dict:
+    local_tz = race_timezone(race)
+    end_time = (
+        event.end_time.astimezone(local_tz).strftime("%H:%M:%S")
+        if event.end_time
+        else ""
+    )
+    return {
+        "id": event.id,
+        "end_time": end_time,
+        "server_time": event.server_time.astimezone(local_tz).strftime("%H:%M:%S"),
+    }
+
+
+def load_pending_end_events(
+    db: Session, race_id: str, race_part_id: str, created_by_username: str
+) -> list[TimingEvent]:
+    return db.scalars(
+        select(TimingEvent)
+        .where(
+            TimingEvent.race_id == race_id,
+            TimingEvent.race_part_id == race_part_id,
+            TimingEvent.participant_id.is_(None),
+            TimingEvent.group.is_(None),
+            TimingEvent.end_time.is_not(None),
+            TimingEvent.created_by_username == created_by_username,
+        )
+        .order_by(TimingEvent.server_time.desc())
+    ).all()
 
 
 def compute_participant_duration(
@@ -1299,6 +1369,7 @@ def create_timing_event(
     duration_seconds: int | None,
     start_time: datetime | None,
     end_time: datetime | None,
+    created_by_username: str | None = None,
 ) -> TimingEvent:
     server_now = datetime.now(tz=race_timezone(race))
     event = TimingEvent(
@@ -1311,6 +1382,7 @@ def create_timing_event(
         duration_seconds=duration_seconds,
         start_time=start_time,
         end_time=end_time,
+        created_by_username=created_by_username,
     )
     db.add(event)
     return event
@@ -1797,8 +1869,11 @@ def submit_start_api(
 
 
 @app.get("/race/{race_id}/part/{race_part_id}/submit-end", response_class=HTMLResponse)
-def submit_end_form(request: Request, race_id: str, race_part_id: str, db: Session = Depends(get_db)):
+def submit_end_form(
+    request: Request, race_id: str, race_part_id: str, db: Session = Depends(get_db)
+):
     require_organiser(request, race_id)
+    username = current_username(request)
     race = db.get(Race, race_id)
     if not race:
         raise HTTPException(status_code=404)
@@ -1809,16 +1884,45 @@ def submit_end_form(request: Request, race_id: str, race_part_id: str, db: Sessi
     )
     if not part or part.is_overall:
         raise HTTPException(status_code=404)
+    pending_end_events = load_pending_end_events(db, race_id, race_part_id, username)
     return templates.TemplateResponse(
         "submit_end.html",
         {
             "request": request,
             "race": race,
             "race_part_id": race_part_id,
+            "pending_end_events": [
+                serialize_pending_end_event(event, race) for event in pending_end_events
+            ],
             "user": current_user(request),
             **back_context(f"/race/{race_id}/part/{race_part_id}", f"< {race_part_id} Results"),
         },
     )
+
+
+@app.get("/race/{race_id}/part/{race_part_id}/submit-end/pending")
+def submit_end_pending(
+    request: Request, race_id: str, race_part_id: str, db: Session = Depends(get_db)
+):
+    require_organiser(request, race_id)
+    username = current_username(request)
+    race = db.get(Race, race_id)
+    if not race:
+        raise HTTPException(status_code=404)
+    part = db.scalar(
+        select(RacePart).where(
+            RacePart.race_id == race_id, RacePart.race_part_id == race_part_id
+        )
+    )
+    if not part or part.is_overall:
+        raise HTTPException(status_code=404)
+    pending_end_events = load_pending_end_events(db, race_id, race_part_id, username)
+    return {
+        "ok": True,
+        "pending_end_events": [
+            serialize_pending_end_event(event, race) for event in pending_end_events
+        ],
+    }
 
 
 @app.post("/race/{race_id}/part/{race_part_id}/submit-end")
@@ -1826,11 +1930,12 @@ def submit_end(
     request: Request,
     race_id: str,
     race_part_id: str,
-    targets: str = Form(...),
+    targets: str = Form(""),
     time_value: str = Form(...),
     db: Session = Depends(get_db),
 ):
     require_organiser(request, race_id)
+    username = current_username(request)
     race = db.get(Race, race_id)
     if not race:
         raise HTTPException(status_code=404)
@@ -1843,35 +1948,108 @@ def submit_end(
         raise HTTPException(status_code=404)
     server_now = datetime.now(tz=race_timezone(race))
     end_dt = parse_time_field(time_value, race, server_now)
-    for token in parse_comma_list(targets):
-        if token.isdigit():
+    target_tokens = parse_comma_list(targets or "")
+    pending_event: TimingEvent | None = None
+    if target_tokens:
+        for token in target_tokens:
+            participant_id, group = parse_target_token(token)
             create_timing_event(
                 db,
                 race,
                 race_part_id,
-                participant_id=int(token),
-                group=None,
+                participant_id=participant_id,
+                group=group,
                 client_time=server_now,
                 duration_seconds=None,
                 start_time=None,
                 end_time=end_dt,
+                created_by_username=username,
             )
-        else:
-            create_timing_event(
-                db,
-                race,
-                race_part_id,
-                participant_id=None,
-                group=token,
-                client_time=server_now,
-                duration_seconds=None,
-                start_time=None,
-                end_time=end_dt,
-            )
+    else:
+        pending_event = create_timing_event(
+            db,
+            race,
+            race_part_id,
+            participant_id=None,
+            group=None,
+            client_time=server_now,
+            duration_seconds=None,
+            start_time=None,
+            end_time=end_dt,
+            created_by_username=username,
+        )
     db.commit()
+    if wants_json_response(request):
+        return JSONResponse(
+            {
+                "ok": True,
+                "pending_event": serialize_pending_end_event(pending_event, race)
+                if pending_event
+                else None,
+            }
+        )
     return RedirectResponse(
         f"/race/{race_id}/part/{race_part_id}/submit-end", status_code=303
     )
+
+
+@app.post("/race/{race_id}/part/{race_part_id}/submit-end/{event_id}/targets")
+def submit_end_targets(
+    request: Request,
+    race_id: str,
+    race_part_id: str,
+    event_id: int,
+    targets: str = Form(...),
+    db: Session = Depends(get_db),
+):
+    require_organiser(request, race_id)
+    username = current_username(request)
+    race = db.get(Race, race_id)
+    if not race:
+        raise HTTPException(status_code=404)
+    part = db.scalar(
+        select(RacePart).where(
+            RacePart.race_id == race_id, RacePart.race_part_id == race_part_id
+        )
+    )
+    if not part or part.is_overall:
+        raise HTTPException(status_code=404)
+    event = db.get(TimingEvent, event_id)
+    if (
+        not event
+        or event.race_id != race_id
+        or event.race_part_id != race_part_id
+        or event.created_by_username != username
+    ):
+        raise HTTPException(status_code=404)
+    if event.participant_id is not None or event.group is not None or event.end_time is None:
+        raise HTTPException(status_code=404)
+    target_tokens = parse_comma_list(targets)
+    if not target_tokens:
+        raise HTTPException(status_code=400, detail="Participant or group required")
+
+    first_participant_id, first_group = parse_target_token(target_tokens[0])
+    event.participant_id = first_participant_id
+    event.group = first_group
+
+    for token in target_tokens[1:]:
+        participant_id, group = parse_target_token(token)
+        duplicate = TimingEvent(
+            race_id=event.race_id,
+            race_part_id=event.race_part_id,
+            participant_id=participant_id,
+            group=group,
+            client_time=event.client_time,
+            server_time=event.server_time,
+            duration_seconds=event.duration_seconds,
+            start_time=event.start_time,
+            end_time=event.end_time,
+            created_by_username=username,
+        )
+        db.add(duplicate)
+
+    db.commit()
+    return JSONResponse({"ok": True, "event_id": event_id, "count": len(target_tokens)})
 
 
 @app.get("/race/{race_id}/part/{race_part_id}/submit-duration", response_class=HTMLResponse)

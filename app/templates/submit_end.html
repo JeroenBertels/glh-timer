@@ -2,11 +2,21 @@
 {% block content %}
 <h1>Submit End Times</h1>
 <div class="card">
-  <form id="end-form" method="post" action="/race/{{ race.race_id }}/part/{{ race_part_id }}/submit-end" data-async-submit="true" data-offline-queue="true" data-reset-on-success="true">
+  <form
+    id="end-form"
+    method="post"
+    action="/race/{{ race.race_id }}/part/{{ race_part_id }}/submit-end"
+    data-offline-queue="true"
+    data-reset-on-success="true"
+    data-expect-json="true"
+  >
     <label>
       Participants or Groups (comma-separated)
-      <input type="text" name="targets" id="end-targets" required />
+      <input type="text" name="targets" id="end-targets" />
     </label>
+    <p class="small">
+      Leave empty to capture server time now and fill bib/group later.
+    </p>
     <label>
       Time (HH:MM:SS or NOW)
       <input type="text" name="time_value" value="NOW" required />
@@ -23,6 +33,14 @@
   <p class="small" id="qr-status">Camera idle. Tap “Start Camera” to begin scanning.</p>
   <p class="small">Keep scanning: each QR auto-submits with time NOW.</p>
 </div>
+<div class="card">
+  <h2>Pending Bib or Group</h2>
+  <p class="small">
+    End-time submissions without a bib/group appear here. Enter a bib, group, or comma-separated list and press OK.
+  </p>
+  <p id="pending-end-empty" class="small">No pending end times.</p>
+  <div id="pending-end-list" class="pending-end-list"></div>
+</div>
 {% endblock %}
 
 {% block scripts %}
@@ -33,11 +51,187 @@
   const endForm = document.getElementById('end-form');
   const startButton = document.getElementById('start-camera');
   const qrStatus = document.getElementById('qr-status');
+  const pendingList = document.getElementById('pending-end-list');
+  const pendingEmpty = document.getElementById('pending-end-empty');
+  const initialPendingEndEvents = {{ pending_end_events | tojson }};
+  const pendingEndpoint = `${endForm.action}/pending`;
   let qrInstance = null;
   const scanCooldownMs = 5000;
   const recentScans = new Map();
+  const pendingTargetPlaceholder = 'Bib, group, or comma-separated list';
 
-  function handleScan(decodedText) {
+  function refreshPendingEmptyState() {
+    pendingEmpty.style.display = pendingList.children.length > 0 ? 'none' : 'block';
+  }
+
+  async function savePendingTargets(eventId, row, input, button) {
+    const targets = input.value.trim();
+    if (!targets) {
+      flashMessage('Enter bib or group first');
+      return;
+    }
+    button.disabled = true;
+    input.disabled = true;
+    try {
+      const response = await fetch(`${endForm.action}/${eventId}/targets`, {
+        method: 'post',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          Accept: 'application/json',
+          'X-Requested-With': 'XMLHttpRequest',
+        },
+        body: new URLSearchParams({ targets }),
+      });
+      const payload = await response.json();
+      if (!response.ok || !payload || !payload.ok) {
+        flashMessage('Update failed');
+        button.disabled = false;
+        input.disabled = false;
+        return;
+      }
+      row.remove();
+      refreshPendingEmptyState();
+      flashMessage('Updated');
+    } catch (error) {
+      flashMessage('Update failed');
+      button.disabled = false;
+      input.disabled = false;
+    }
+  }
+
+  function renderPendingEvent(item) {
+    const existing = pendingList.querySelector(`[data-event-id="${item.id}"]`);
+    if (existing) {
+      existing.remove();
+    }
+    const row = document.createElement('div');
+    row.className = 'pending-end-item';
+    row.dataset.eventId = item.id;
+
+    const caption = document.createElement('p');
+    caption.className = 'small';
+    caption.textContent = item.end_time
+      ? `Event #${item.id}: end ${item.end_time} (captured ${item.server_time})`
+      : `Event #${item.id}: captured ${item.server_time}`;
+
+    const controls = document.createElement('div');
+    controls.className = 'actions';
+
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.placeholder = pendingTargetPlaceholder;
+    input.setAttribute('aria-label', `Targets for event ${item.id}`);
+
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.textContent = 'OK';
+    button.addEventListener('click', () => savePendingTargets(item.id, row, input, button));
+    input.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        savePendingTargets(item.id, row, input, button);
+      }
+    });
+
+    controls.append(input, button);
+    row.append(caption, controls);
+    pendingList.prepend(row);
+    refreshPendingEmptyState();
+  }
+
+  function capturePendingDrafts() {
+    const drafts = {};
+    let focusedEventId = null;
+    const activeElement = document.activeElement;
+    const rows = pendingList.querySelectorAll('.pending-end-item');
+    for (const row of rows) {
+      const eventId = row.dataset.eventId;
+      const input = row.querySelector('input');
+      if (!eventId || !input) {
+        continue;
+      }
+      drafts[eventId] = input.value;
+      if (activeElement === input) {
+        focusedEventId = eventId;
+      }
+    }
+    return { drafts, focusedEventId };
+  }
+
+  function restorePendingDrafts(drafts, focusedEventId) {
+    for (const [eventId, value] of Object.entries(drafts)) {
+      const row = pendingList.querySelector(`[data-event-id="${eventId}"]`);
+      const input = row ? row.querySelector('input') : null;
+      if (!input) {
+        continue;
+      }
+      input.value = value;
+    }
+    if (!focusedEventId) {
+      return;
+    }
+    const focusedRow = pendingList.querySelector(`[data-event-id="${focusedEventId}"]`);
+    const focusedInput = focusedRow ? focusedRow.querySelector('input') : null;
+    if (!focusedInput) {
+      return;
+    }
+    focusedInput.focus();
+    const cursor = focusedInput.value.length;
+    focusedInput.setSelectionRange(cursor, cursor);
+  }
+
+  function replacePendingEvents(items) {
+    const { drafts, focusedEventId } = capturePendingDrafts();
+    pendingList.innerHTML = '';
+    for (const item of items) {
+      renderPendingEvent(item);
+    }
+    restorePendingDrafts(drafts, focusedEventId);
+    refreshPendingEmptyState();
+  }
+
+  async function syncPendingEvents() {
+    try {
+      const response = await fetch(pendingEndpoint, {
+        method: 'get',
+        headers: {
+          Accept: 'application/json',
+          'X-Requested-With': 'XMLHttpRequest',
+        },
+      });
+      if (!response.ok) {
+        return;
+      }
+      const payload = await response.json();
+      if (!payload || !Array.isArray(payload.pending_end_events)) {
+        return;
+      }
+      replacePendingEvents(payload.pending_end_events);
+    } catch (error) {
+      // Keep last rendered state if syncing fails.
+    }
+  }
+
+  replacePendingEvents(initialPendingEndEvents);
+
+  async function submitEndForm() {
+    const submitWithoutTargets = !targetInput.value.trim();
+    const result = await submitFormAsync(endForm);
+    if (!result.ok || result.queued || !submitWithoutTargets) {
+      return result;
+    }
+    const pendingEvent = result.data && result.data.pending_event
+      ? result.data.pending_event
+      : null;
+    if (pendingEvent) {
+      renderPendingEvent(pendingEvent);
+      return result;
+    }
+    await syncPendingEvents();
+    return result;
+  }
+
+  async function handleScan(decodedText) {
     const bib = decodedText.trim();
     if (!bib) {
       return;
@@ -55,8 +249,8 @@
       }
     }
     targetInput.value = bib;
-    submitFormAsync(endForm);
-    qrStatus.textContent = `Scanned ${bib}.`;
+    const result = await submitEndForm();
+    qrStatus.textContent = result.ok ? `Scanned ${bib}.` : `Scan submit failed for ${bib}.`;
   }
 
   async function startCamera() {
@@ -103,6 +297,12 @@
     }
   }
 
+  endForm.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    await submitEndForm();
+  });
+
+  setInterval(syncPendingEvents, 3000);
   startButton.addEventListener('click', startCamera);
 </script>
 {% endblock %}

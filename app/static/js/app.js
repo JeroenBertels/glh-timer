@@ -87,13 +87,41 @@ async function submitFormAsync(form) {
   if (!navigator.onLine && form.dataset.offlineQueue === 'true') {
     queueSubmission(form);
     flashMessage('Offline: submission queued');
-    return;
+    return { ok: true, queued: true, response: null, data: null };
   }
-  const response = await fetch(form.action, {
-    method: form.method || 'post',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: serializeForm(form),
-  });
+  const headers = { 'Content-Type': 'application/x-www-form-urlencoded' };
+  if (form.dataset.expectJson === 'true') {
+    headers.Accept = 'application/json';
+    headers['X-Requested-With'] = 'XMLHttpRequest';
+  }
+
+  let response;
+  try {
+    response = await fetch(form.action, {
+      method: form.method || 'post',
+      headers,
+      body: serializeForm(form),
+    });
+  } catch (error) {
+    flashMessage('Submission failed');
+    form.dispatchEvent(
+      new CustomEvent('async-form-error', {
+        detail: { form, response: null, data: null, error },
+      })
+    );
+    return { ok: false, response: null, data: null, error };
+  }
+
+  let data = null;
+  const contentType = response.headers.get('content-type') || '';
+  if (contentType.includes('application/json')) {
+    try {
+      data = await response.json();
+    } catch (error) {
+      data = null;
+    }
+  }
+
   if (response.ok) {
     beep();
     flashMessage('Saved');
@@ -103,9 +131,20 @@ async function submitFormAsync(form) {
     if (form.dataset.refreshOnSuccess === 'true') {
       setTimeout(() => window.location.reload(), 400);
     }
+    form.dispatchEvent(
+      new CustomEvent('async-form-success', {
+        detail: { form, response, data },
+      })
+    );
   } else {
     flashMessage('Submission failed');
+    form.dispatchEvent(
+      new CustomEvent('async-form-error', {
+        detail: { form, response, data },
+      })
+    );
   }
+  return { ok: response.ok, response, data };
 }
 
 window.addEventListener('online', flushQueue);
