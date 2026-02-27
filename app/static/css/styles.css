@@ -202,6 +202,25 @@ button.danger {
   color: var(--muted);
 }
 
+.pending-end-list {
+  display: grid;
+  gap: 10px;
+}
+
+.pending-end-item {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px;
+  background: #faf9f6;
+  display: grid;
+  gap: 8px;
+}
+
+.pending-end-item .actions {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
 .flash {
   position: fixed;
   bottom: 20px;
