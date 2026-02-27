@@ -21,7 +21,13 @@
     </label>
     <label>
       Group
-      <input type="text" name="group" required />
+      <input
+        type="text"
+        name="group"
+        required
+        pattern="[A-Za-z].*"
+        title="Group name must start with a letter (for example: Open, M30, F10)"
+      />
     </label>
     <label>
       Club
