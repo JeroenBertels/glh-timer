@@ -503,8 +503,29 @@ def delete_race(request: Request, race_id: str, db: Session = Depends(get_db)):
     require_admin(request)
     race = db.get(Race, race_id)
     if race:
-        db.delete(race)
-        db.commit()
+        try:
+            db.query(TimingEvent).filter(TimingEvent.race_id == race_id).delete(
+                synchronize_session=False
+            )
+            db.delete(race)
+            db.commit()
+        except IntegrityError:
+            db.rollback()
+            races = db.scalars(select(Race).order_by(Race.race_date)).all()
+            return templates.TemplateResponse(
+                "manage_races.html",
+                {
+                    "request": request,
+                    "races": races,
+                    "user": current_user(request),
+                    "error": (
+                        f"Unable to delete race '{race_id}' because it is still referenced by "
+                        "other records."
+                    ),
+                    **back_context("/", "< Races"),
+                },
+                status_code=400,
+            )
     return RedirectResponse("/manage/races", status_code=303)
 
 
