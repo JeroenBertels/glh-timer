@@ -3,6 +3,7 @@ from __future__ import annotations
 import csv
 import io
 import json
+import re
 import zipfile
 from datetime import date, datetime
 import time
@@ -143,6 +144,27 @@ def parse_comma_list(value: str) -> list[str]:
     return [item.strip() for item in value.split(",") if item.strip()]
 
 
+BIB_RANGE_PATTERN = re.compile(r"^(\d+)\s*-\s*(\d+)$")
+GROUP_NAME_PATTERN = re.compile(r"^[A-Za-z][A-Za-z0-9]*$")
+
+
+def parse_target_list(value: str) -> list[str]:
+    tokens = parse_comma_list(value)
+    expanded_tokens: list[str] = []
+    for token in tokens:
+        match = BIB_RANGE_PATTERN.fullmatch(token)
+        if not match:
+            expanded_tokens.append(token)
+            continue
+        start_bib = int(match.group(1))
+        end_bib = int(match.group(2))
+        step = 1 if start_bib <= end_bib else -1
+        expanded_tokens.extend(
+            [str(number) for number in range(start_bib, end_bib + step, step)]
+        )
+    return expanded_tokens
+
+
 def wants_json_response(request: Request) -> bool:
     accept = request.headers.get("accept", "")
     requested_with = request.headers.get("x-requested-with", "")
@@ -188,14 +210,14 @@ def parse_time_field(
 
 
 def is_valid_group_name(value: str) -> bool:
-    return bool(value) and value[0].isalpha()
+    return bool(GROUP_NAME_PATTERN.fullmatch(value))
 
 
 def group_name_error(group: str) -> str:
     display_value = group or "<empty>"
     return (
         f"Invalid group name '{display_value}'. Group names must start with a letter "
-        "(for example: Open, M30, F10)."
+        "and contain only letters or numbers (A-Z, a-z, 0-9), for example: Open, M30, F10."
     )
 
 
@@ -1017,10 +1039,23 @@ def update_participant(
     participant = db.get(Participant, participant_pk)
     if not participant:
         raise HTTPException(status_code=404)
+    group_value = group.strip()
+    if not is_valid_group_name(group_value):
+        return templates.TemplateResponse(
+            "edit_participant.html",
+            {
+                "request": request,
+                "race_id": race_id,
+                "participant": participant,
+                "user": current_user(request),
+                "error": group_name_error(group_value),
+                **back_context(f"/race/{race_id}/manage/participants", "< Manage Participants"),
+            },
+        )
     participant.participant_id = participant_id
     participant.first_name = first_name.strip()
     participant.last_name = last_name.strip()
-    participant.group = group.strip()
+    participant.group = group_value
     participant.club = club.strip()
     participant.sex = sex.strip()
     db.commit()
@@ -1108,7 +1143,7 @@ def upload_participants_csv(
             race_id,
             "Invalid group names in CSV: "
             + ", ".join(invalid_groups)
-            + ". Group names must start with a letter.",
+            + ". Group names must start with a letter and use only letters/numbers (A-Z, a-z, 0-9).",
         )
     existing_rows = {
         participant.participant_id: {
@@ -1157,7 +1192,8 @@ def apply_participants_csv(
                 db,
                 race_id,
                 f"Invalid group name in CSV for bib {participant_id}: "
-                f"'{group_value or '<empty>'}'. Group names must start with a letter.",
+                f"'{group_value or '<empty>'}'. Group names must start with a letter "
+                "and use only letters/numbers (A-Z, a-z, 0-9).",
             )
         row["group"] = group_value
     for row in preview.get("added", []):
@@ -1785,7 +1821,7 @@ def submit_start(
         raise HTTPException(status_code=404)
     server_now = datetime.now(tz=race_timezone(race))
     start_dt = parse_time_field(time_value, race, server_now)
-    for token in parse_comma_list(targets):
+    for token in parse_target_list(targets):
         if token.isdigit():
             create_timing_event(
                 db,
@@ -1865,7 +1901,7 @@ def wave_starts_data(
     )
     if not part or part.is_overall:
         raise HTTPException(status_code=404)
-    target_list = parse_comma_list(targets)
+    target_list = parse_target_list(targets)
     participants = db.scalars(
         select(Participant).where(Participant.race_id == race_id)
     ).all()
@@ -2023,7 +2059,7 @@ def submit_end(
         raise HTTPException(status_code=404)
     server_now = datetime.now(tz=race_timezone(race))
     end_dt = parse_time_field(time_value, race, server_now)
-    target_tokens = parse_comma_list(targets or "")
+    target_tokens = parse_target_list(targets or "")
     pending_event: TimingEvent | None = None
     if target_tokens:
         for token in target_tokens:
@@ -2099,7 +2135,7 @@ def submit_end_targets(
         raise HTTPException(status_code=404)
     if event.participant_id is not None or event.group is not None or event.end_time is None:
         raise HTTPException(status_code=404)
-    target_tokens = parse_comma_list(targets)
+    target_tokens = parse_target_list(targets)
     if not target_tokens:
         raise HTTPException(status_code=400, detail="Participant or group required")
 
@@ -2176,7 +2212,7 @@ def submit_duration(
         raise HTTPException(status_code=404)
     duration_seconds = parse_duration_field(duration)
     server_now = datetime.now(tz=race_timezone(race))
-    for token in parse_comma_list(targets):
+    for token in parse_target_list(targets):
         if token.isdigit():
             create_timing_event(
                 db,
