@@ -1888,6 +1888,7 @@ def wave_starts_data(
     race_id: str,
     race_part_id: str,
     targets: str = Form(...),
+    start_offset_seconds: int = Form(60),
     db: Session = Depends(get_db),
 ):
     require_organiser(request, race_id)
@@ -1941,7 +1942,13 @@ def wave_starts_data(
                 }
             )
     schedule.sort(key=lambda item: item["offset_seconds"])
-    return {"schedule": schedule}
+    safe_start_offset_seconds = max(0, start_offset_seconds)
+    first_offset_seconds = schedule[0]["offset_seconds"] if schedule else 0
+    return {
+        "schedule": schedule,
+        "start_offset_seconds": safe_start_offset_seconds,
+        "first_offset_seconds": first_offset_seconds,
+    }
 
 
 @app.post("/race/{race_id}/part/{race_part_id}/submit-start/api")

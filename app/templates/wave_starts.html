@@ -7,6 +7,10 @@
       Participants and/or Groups (comma-separated)
       <input type="text" name="targets" required />
     </label>
+    <label>
+      Start Offset (seconds before first wave start)
+      <input type="number" name="start_offset_seconds" value="60" min="0" step="1" required />
+    </label>
     <div class="actions">
       <button id="start-wave" type="submit">Start Wave Starts</button>
       <button class="ghost" id="cancel-wave" type="button" disabled style="display: none;">Cancel</button>
@@ -14,7 +18,7 @@
   </form>
 </div>
 <div class="card">
-  <div id="wave-status" class="small">Waiting to start…</div>
+  <div id="wave-live-timer" class="wave-live-timer" hidden>00:00:00.0</div>
   <div class="table-wrap">
     <table class="table" id="wave-table">
       <thead>
@@ -38,10 +42,59 @@
   const status = document.getElementById('wave-status');
   const startButton = document.getElementById('start-wave');
   const cancelButton = document.getElementById('cancel-wave');
+  const offsetInput = form.querySelector('input[name="start_offset_seconds"]');
+  const waveLiveTimer = document.getElementById('wave-live-timer');
   let waveRunning = false;
   const scheduled = new Map();
   let remainingStarts = 0;
   let cancelMode = 'cancel';
+  let waveTimerIntervalId = null;
+  let waveTimerStartMs = 0;
+  let waveTimerBaseSeconds = 0;
+
+  function formatOffset(seconds) {
+    const safe = Math.max(0, Math.floor(seconds));
+    const minutes = Math.floor(safe / 60);
+    const secs = safe % 60;
+    return `${minutes}:${String(secs).padStart(2, '0')}`;
+  }
+
+  function formatSignedTimer(seconds) {
+    const negative = seconds < 0;
+    const absValue = Math.abs(seconds);
+    const totalTenths = Math.floor(absValue * 10);
+    const tenths = totalTenths % 10;
+    const totalSeconds = Math.floor(totalTenths / 10);
+    const secs = totalSeconds % 60;
+    const minutes = Math.floor(totalSeconds / 60) % 60;
+    const hours = Math.floor(totalSeconds / 3600);
+    return `${negative ? '-' : ''}${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(secs).padStart(2, '0')}.${tenths}`;
+  }
+
+  function clearWaveTimer(resetDisplay = true) {
+    if (waveTimerIntervalId !== null) {
+      clearInterval(waveTimerIntervalId);
+      waveTimerIntervalId = null;
+    }
+    if (resetDisplay) {
+      waveLiveTimer.hidden = true;
+      waveLiveTimer.textContent = '00:00:00.0';
+    }
+  }
+
+  function updateWaveTimer() {
+    const elapsedSeconds = (Date.now() - waveTimerStartMs) / 1000;
+    waveLiveTimer.textContent = formatSignedTimer(waveTimerBaseSeconds + elapsedSeconds);
+  }
+
+  function startWaveTimer(firstOffsetSeconds, startOffsetSeconds) {
+    clearWaveTimer(false);
+    waveTimerBaseSeconds = firstOffsetSeconds - startOffsetSeconds;
+    waveTimerStartMs = Date.now();
+    waveLiveTimer.hidden = false;
+    updateWaveTimer();
+    waveTimerIntervalId = setInterval(updateWaveTimer, 100);
+  }
 
   function renderSchedule(schedule) {
     tbody.innerHTML = '';
@@ -51,7 +104,7 @@
       row.innerHTML = `
         <td>${item.participant_id}</td>
         <td>${item.group}</td>
-        <td>${Math.floor(item.offset_seconds / 60)}:${String(item.offset_seconds % 60).padStart(2, '0')}</td>
+        <td>${formatOffset(item.offset_seconds)}</td>
         <td class="small">waiting</td>
       `;
       tbody.appendChild(row);
@@ -74,14 +127,27 @@
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: new URLSearchParams(new FormData(form)),
     });
+    if (!response.ok) {
+      status.textContent = 'Unable to start wave.';
+      return;
+    }
     const data = await response.json();
     const schedule = data.schedule || [];
     renderSchedule(schedule);
     if (!schedule.length) {
+      clearWaveTimer();
       status.textContent = 'No valid participants for wave start.';
       return;
     }
-    status.textContent = 'Wave started.';
+    const requestedOffset = Number(offsetInput.value);
+    const fallbackOffset = Number.isFinite(requestedOffset) ? Math.max(0, requestedOffset) : 60;
+    const startOffsetSeconds = Number.isFinite(data.start_offset_seconds)
+      ? data.start_offset_seconds
+      : fallbackOffset;
+    const firstOffsetSeconds = Number.isFinite(data.first_offset_seconds)
+      ? data.first_offset_seconds
+      : Math.min(...schedule.map((item) => item.offset_seconds));
+    startWaveTimer(firstOffsetSeconds, startOffsetSeconds);
     waveRunning = true;
     remainingStarts = schedule.length;
     cancelMode = 'cancel';
@@ -91,7 +157,10 @@
     cancelButton.style.display = 'inline-flex';
     cancelButton.textContent = 'Cancel';
     schedule.forEach(item => {
-      const delay = item.offset_seconds * 1000;
+      const delay = Math.max(
+        0,
+        (startOffsetSeconds + (item.offset_seconds - firstOffsetSeconds)) * 1000
+      );
       const timeoutId = setTimeout(async () => {
         const row = tbody.querySelector(`tr[data-participant-id="${item.participant_id}"]`);
         if (row) {
@@ -107,8 +176,9 @@
         if (remainingStarts <= 0) {
           waveRunning = false;
           cancelMode = 'clear';
-          status.textContent = 'Wave completed.';
+          clearWaveTimer(false);
           cancelButton.textContent = 'Clear';
+          scheduled.clear();
         }
       }, delay);
       scheduled.set(item.participant_id, timeoutId);
@@ -129,6 +199,7 @@
     scheduled.clear();
     waveRunning = false;
     remainingStarts = 0;
+    clearWaveTimer();
     startButton.disabled = false;
     startButton.style.display = 'inline-flex';
     cancelButton.disabled = true;
