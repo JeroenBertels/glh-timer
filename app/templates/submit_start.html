@@ -2,7 +2,7 @@
 {% block content %}
 <h1>Submit Start Times</h1>
 <div class="card">
-  <form method="post" action="/race/{{ race.race_id }}/part/{{ race_part_id }}/submit-start" data-async-submit="true" data-offline-queue="true" data-reset-on-success="true">
+  <form id="submit-start-form" method="post" action="/race/{{ race.race_id }}/part/{{ race_part_id }}/submit-start" data-async-submit="true" data-offline-queue="true" data-reset-on-success="true" data-expect-json="true">
     <label>
       Participants and/or Groups (comma-separated)
       <input type="text" name="targets" required />
@@ -11,10 +11,28 @@
       Time (HH:MM:SS or NOW)
       <input type="text" name="time_value" value="NOW" required />
     </label>
+    <label class="checkbox-row">
+      <input type="checkbox" name="auto_show_timer" value="true" />
+      Open live timer after submit
+    </label>
     <button type="submit">Submit Start</button>
   </form>
 </div>
 <div class="card">
   <a class="button ghost" href="/race/{{ race.race_id }}/part/{{ race_part_id }}/submit-start/wave">Automated Wave Starts</a>
 </div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  const submitStartForm = document.getElementById('submit-start-form');
+  if (submitStartForm) {
+    submitStartForm.addEventListener('async-form-success', (event) => {
+      const payload = event.detail && event.detail.data ? event.detail.data : null;
+      if (payload && payload.redirect_url) {
+        window.location.assign(payload.redirect_url);
+      }
+    });
+  }
+</script>
 {% endblock %}

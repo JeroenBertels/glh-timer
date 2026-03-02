@@ -202,6 +202,23 @@ button.danger {
   color: var(--muted);
 }
 
+.checkbox-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--ink);
+  font-size: 0.9rem;
+}
+
+.checkbox-row input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  padding: 0;
+  border-radius: 4px;
+  accent-color: var(--accent);
+}
+
 .wave-live-timer {
   font-family: "Space Grotesk", "Trebuchet MS", sans-serif;
   font-size: clamp(2rem, 8vw, 4.5rem);
