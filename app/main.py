@@ -1277,7 +1277,11 @@ def race_part_results(
 
 @app.get("/race/{race_id}/part/{race_part_id}/timer", response_class=HTMLResponse)
 def show_timer_page(
-    request: Request, race_id: str, race_part_id: str, db: Session = Depends(get_db)
+    request: Request,
+    race_id: str,
+    race_part_id: str,
+    event_id: int | None = Query(None),
+    db: Session = Depends(get_db),
 ):
     require_organiser(request, race_id)
     race = db.get(Race, race_id)
@@ -1336,6 +1340,10 @@ def show_timer_page(
         )
 
     selected_event_id = start_events[0]["id"] if start_events else None
+    if event_id is not None:
+        matching_event = next((item for item in start_events if item["id"] == event_id), None)
+        if matching_event:
+            selected_event_id = event_id
     return templates.TemplateResponse(
         "show_timer.html",
         {
@@ -1806,6 +1814,7 @@ def submit_start(
     race_part_id: str,
     targets: str = Form(...),
     time_value: str = Form(...),
+    auto_show_timer: bool = Form(False),
     db: Session = Depends(get_db),
 ):
     require_organiser(request, race_id)
@@ -1821,9 +1830,10 @@ def submit_start(
         raise HTTPException(status_code=404)
     server_now = datetime.now(tz=race_timezone(race))
     start_dt = parse_time_field(time_value, race, server_now)
+    latest_created_event: TimingEvent | None = None
     for token in parse_target_list(targets):
         if token.isdigit():
-            create_timing_event(
+            latest_created_event = create_timing_event(
                 db,
                 race,
                 race_part_id,
@@ -1835,7 +1845,7 @@ def submit_start(
                 end_time=None,
             )
         else:
-            create_timing_event(
+            latest_created_event = create_timing_event(
                 db,
                 race,
                 race_part_id,
@@ -1847,9 +1857,19 @@ def submit_start(
                 end_time=None,
             )
     db.commit()
-    return RedirectResponse(
-        f"/race/{race_id}/part/{race_part_id}/submit-start", status_code=303
-    )
+    redirect_url = f"/race/{race_id}/part/{race_part_id}/submit-start"
+    if auto_show_timer:
+        redirect_url = f"/race/{race_id}/part/{race_part_id}/timer"
+        if latest_created_event and latest_created_event.id is not None:
+            redirect_url = f"{redirect_url}?event_id={latest_created_event.id}"
+    if wants_json_response(request):
+        return JSONResponse(
+            {
+                "ok": True,
+                "redirect_url": redirect_url if auto_show_timer else None,
+            }
+        )
+    return RedirectResponse(redirect_url, status_code=303)
 
 
 @app.get("/race/{race_id}/part/{race_part_id}/submit-start/wave", response_class=HTMLResponse)
