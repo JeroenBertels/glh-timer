@@ -1,0 +1,197 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Show Timer</h1>
+<div class="card">
+  {% if start_events %}
+    <label>
+      Start Time Event
+      <select id="start-event-select">
+        {% for event in start_events %}
+          <option value="{{ event.id }}" {% if selected_event_id == event.id %}selected{% endif %}>{{ event.option_label }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <div id="timer-meta-list" class="timer-meta-list"></div>
+  {% else %}
+    <p class="small">No start time events submitted yet for this race part.</p>
+  {% endif %}
+</div>
+<div id="timer-card" class="card timer-card">
+  <div id="timer-panel" class="timer-live-row">
+    <div id="timer-display" class="digital-timer">00:00:00.0</div>
+    <button
+      id="fullscreen-toggle"
+      class="timer-fullscreen-toggle"
+      type="button"
+      title="Full screen"
+      aria-label="Enter full screen"
+    >
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M3.5 3.5H9M15 3.5H20.5M20.5 3.5V9M20.5 15V20.5M3.5 20.5H9M15 20.5H20.5M3.5 3.5V9M3.5 15V20.5" />
+      </svg>
+    </button>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  const startEvents = {{ start_events | tojson }};
+  const startEventSelect = document.getElementById('start-event-select');
+  const timerCard = document.getElementById('timer-card');
+  const timerDisplay = document.getElementById('timer-display');
+  const fullscreenToggle = document.getElementById('fullscreen-toggle');
+  const timerMetaList = document.getElementById('timer-meta-list');
+  const eventMap = new Map(startEvents.map((event) => [String(event.id), event]));
+
+  function formatElapsed(ms) {
+    const safeMs = Math.max(0, ms);
+    const totalDeciseconds = Math.floor(safeMs / 100);
+    const deciseconds = totalDeciseconds % 10;
+    const totalSeconds = Math.floor(totalDeciseconds / 10);
+    const seconds = totalSeconds % 60;
+    const minutes = Math.floor(totalSeconds / 60) % 60;
+    const hours = Math.floor(totalSeconds / 3600);
+    return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}.${deciseconds}`;
+  }
+
+  function selectedEvent() {
+    if (!startEventSelect) return null;
+    return eventMap.get(startEventSelect.value) || null;
+  }
+
+  function renderMatchingEvents(selected) {
+    if (!timerMetaList) return;
+    if (!selected) {
+      timerMetaList.innerHTML = '';
+      return;
+    }
+    const matchingEvents = startEvents.filter((event) => event.start_label === selected.start_label);
+    const orderedEvents = [
+      selected,
+      ...matchingEvents.filter((event) => event.id !== selected.id),
+    ];
+    timerMetaList.innerHTML = '';
+    orderedEvents.forEach((event) => {
+      const row = document.createElement('p');
+      row.className = 'small';
+      row.textContent = `${event.target_label} - start ${event.start_label} - submitted ${event.submitted_label}`;
+      timerMetaList.appendChild(row);
+    });
+  }
+
+  function updateTimer() {
+    const event = selectedEvent();
+    if (!event) {
+      timerDisplay.textContent = '--:--:--.-';
+      renderMatchingEvents(null);
+      fitTimerInFullscreen();
+      return;
+    }
+    const elapsedMs = Date.now() - event.start_ms;
+    timerDisplay.textContent = formatElapsed(elapsedMs);
+    renderMatchingEvents(event);
+    fitTimerInFullscreen();
+  }
+
+  function currentFullscreenElement() {
+    return document.fullscreenElement || document.webkitFullscreenElement || null;
+  }
+
+  function supportsFullscreenApi() {
+    return Boolean(
+      timerCard &&
+      (
+        timerCard.requestFullscreen ||
+        timerCard.webkitRequestFullscreen
+      )
+    );
+  }
+
+  function isTimerFullscreen() {
+    const fullscreenElement = currentFullscreenElement();
+    if (!fullscreenElement || !timerCard) return false;
+    return (
+      fullscreenElement === timerCard ||
+      timerCard.contains(fullscreenElement) ||
+      fullscreenElement.contains(timerCard)
+    );
+  }
+
+  function syncFullscreenState() {
+    if (!timerCard) return;
+    timerCard.classList.toggle('timer-card-fs', isTimerFullscreen());
+  }
+
+  function fitTimerInFullscreen() {
+    if (!timerCard || !timerDisplay) return;
+    if (!isTimerFullscreen()) {
+      timerDisplay.style.fontSize = '';
+      timerDisplay.style.letterSpacing = '';
+      return;
+    }
+    const text = timerDisplay.textContent || '00:00:00.0';
+    const availableWidth = Math.max(240, window.innerWidth - 48);
+    const availableHeight = Math.max(160, window.innerHeight - 48);
+    const charWidthFactor = 0.68;
+    const fontByWidth = availableWidth / (text.length * charWidthFactor);
+    const fontByHeight = availableHeight * 0.52;
+    const size = Math.max(52, Math.min(fontByWidth, fontByHeight));
+    timerDisplay.style.fontSize = `${Math.floor(size)}px`;
+    timerDisplay.style.letterSpacing = `${Math.max(1, Math.floor(size * 0.02))}px`;
+  }
+
+  function refreshFullscreenButton() {
+    if (!fullscreenToggle) return;
+    syncFullscreenState();
+    fitTimerInFullscreen();
+    const isFullscreen = isTimerFullscreen();
+    fullscreenToggle.title = isFullscreen ? 'Exit full screen' : 'Full screen';
+    fullscreenToggle.setAttribute(
+      'aria-label',
+      isFullscreen ? 'Exit full screen' : 'Enter full screen'
+    );
+  }
+
+  function toggleFullscreen() {
+    if (!timerCard) return;
+    try {
+      if (isTimerFullscreen()) {
+        if (document.exitFullscreen) {
+          document.exitFullscreen();
+        } else if (document.webkitExitFullscreen) {
+          document.webkitExitFullscreen();
+        }
+        return;
+      }
+      if (timerCard.requestFullscreen) {
+        timerCard.requestFullscreen();
+      } else if (timerCard.webkitRequestFullscreen) {
+        timerCard.webkitRequestFullscreen();
+      }
+    } catch (error) {
+      // Ignore fullscreen API failures and keep timer working.
+    }
+  }
+
+  if (fullscreenToggle) {
+    if (!supportsFullscreenApi()) {
+      fullscreenToggle.style.display = 'none';
+    } else {
+      fullscreenToggle.addEventListener('click', toggleFullscreen);
+      document.addEventListener('fullscreenchange', refreshFullscreenButton);
+      document.addEventListener('webkitfullscreenchange', refreshFullscreenButton);
+      window.addEventListener('resize', fitTimerInFullscreen);
+      refreshFullscreenButton();
+    }
+  }
+
+  if (startEventSelect) {
+    updateTimer();
+    startEventSelect.addEventListener('change', updateTimer);
+    setInterval(updateTimer, 100);
+  } else {
+    timerDisplay.textContent = '--:--:--.-';
+  }
+</script>
+{% endblock %}

@@ -240,6 +240,132 @@ button.danger {
   transform: translateY(0);
 }
 
+.timer-card {
+  position: relative;
+  text-align: center;
+  overflow: hidden;
+}
+
+.timer-live-row {
+  position: relative;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  width: 100%;
+  min-height: 72px;
+  padding-right: 56px;
+}
+
+.digital-timer {
+  position: relative;
+  z-index: 1;
+  white-space: nowrap;
+  font-family: "Space Grotesk", "Trebuchet MS", sans-serif;
+  font-size: clamp(2rem, 10vw, 5rem);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: var(--accent);
+}
+
+.timer-fullscreen-toggle {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  padding: 0;
+  border: 1px solid #b6bbc5 !important;
+  border-radius: 6px !important;
+  background: #d7dbe3 !important;
+  color: #2f3640 !important;
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+}
+
+.timer-fullscreen-toggle:hover {
+  background: #c8ced9 !important;
+  color: #2f3640 !important;
+}
+
+.timer-fullscreen-toggle svg {
+  width: 20px;
+  height: 20px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.timer-meta-list {
+  display: grid;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.timer-meta-list p {
+  margin: 0;
+}
+
+.timer-card:fullscreen,
+.timer-card:-webkit-full-screen,
+.timer-card.timer-card-fs {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  margin: 0;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+  padding: 0;
+  background: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+
+.timer-card:fullscreen .timer-live-row,
+.timer-card:-webkit-full-screen .timer-live-row,
+.timer-card.timer-card-fs .timer-live-row {
+  width: 100%;
+  height: 100%;
+  min-height: 100%;
+  padding-right: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.timer-card:fullscreen .digital-timer,
+.timer-card:-webkit-full-screen .digital-timer,
+.timer-card.timer-card-fs .digital-timer {
+  color: var(--accent);
+  font-size: clamp(4rem, 10vw, 12rem);
+  line-height: 1;
+  letter-spacing: 0.04em;
+  max-width: 100%;
+}
+
+.timer-card:fullscreen .timer-fullscreen-toggle,
+.timer-card:-webkit-full-screen .timer-fullscreen-toggle,
+.timer-card.timer-card-fs .timer-fullscreen-toggle {
+  position: fixed;
+  top: auto;
+  right: 24px;
+  bottom: 24px;
+  transform: none;
+  color: #2f3640 !important;
+  background: #d7dbe3 !important;
+  border: 1px solid #b6bbc5 !important;
+}
+
 @media (min-width: 768px) {
   .page {
     max-width: 1100px;
