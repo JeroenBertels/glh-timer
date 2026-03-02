@@ -11,7 +11,7 @@
     data-expect-json="true"
   >
     <label>
-      Participants or Groups (comma-separated; leave empty to capture server time now and fill bib/group later)
+      Participants and/or Groups (comma-separated; can be left empty)
       <input type="text" name="targets" id="end-targets" />
     </label>
     <label>
@@ -24,7 +24,7 @@
 <div class="card">
   <h2>Pending Bib or Group</h2>
   <p class="small">
-    End-time submissions without a bib/group appear here. Enter a bib, group, or comma-separated list and press OK.
+    End-time submissions without a bib/group appear here. Enter a bib, group, or comma-separated list (bib ranges like 5-7 allowed) and press OK.
   </p>
   <p id="pending-end-empty" class="small">No pending end times.</p>
   <div id="pending-end-list" class="pending-end-list"></div>
@@ -55,7 +55,7 @@
   let qrInstance = null;
   const scanCooldownMs = 5000;
   const recentScans = new Map();
-  const pendingTargetPlaceholder = 'Bib, group, or comma-separated list';
+  const pendingTargetPlaceholder = 'Bib, group, or comma-separated list (e.g. 5-7)';
 
   function refreshPendingEmptyState() {
     pendingEmpty.style.display = pendingList.children.length > 0 ? 'none' : 'block';

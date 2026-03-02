@@ -2,6 +2,9 @@
 {% block content %}
 <h1>Edit Participant</h1>
 <div class="card">
+  {% if error %}
+  <p class="small">{{ error }}</p>
+  {% endif %}
   <form method="post" action="/race/{{ race_id }}/manage/participants/{{ participant.id }}/edit">
     <label>
       Bib
@@ -17,7 +20,14 @@
     </label>
     <label>
       Group
-      <input type="text" name="group" value="{{ participant.group }}" required />
+      <input
+        type="text"
+        name="group"
+        value="{{ participant.group }}"
+        required
+        pattern="[A-Za-z][A-Za-z0-9]*"
+        title="Group name must start with a letter and use only letters/numbers (for example: Open, M30, F10)"
+      />
     </label>
     <label>
       Club
