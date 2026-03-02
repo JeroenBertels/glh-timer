@@ -1239,6 +1239,81 @@ def race_part_results(
     )
 
 
+@app.get("/race/{race_id}/part/{race_part_id}/timer", response_class=HTMLResponse)
+def show_timer_page(
+    request: Request, race_id: str, race_part_id: str, db: Session = Depends(get_db)
+):
+    require_organiser(request, race_id)
+    race = db.get(Race, race_id)
+    if not race:
+        raise HTTPException(status_code=404)
+    part = db.scalar(
+        select(RacePart).where(
+            RacePart.race_id == race_id, RacePart.race_part_id == race_part_id
+        )
+    )
+    if not part or part.is_overall:
+        raise HTTPException(status_code=404)
+
+    local_tz = race_timezone(race)
+    events = db.scalars(
+        select(TimingEvent)
+        .where(
+            TimingEvent.race_id == race_id,
+            TimingEvent.race_part_id == race_part_id,
+            TimingEvent.start_time.is_not(None),
+        )
+        .order_by(TimingEvent.server_time.desc(), TimingEvent.id.desc())
+    ).all()
+
+    start_events: list[dict] = []
+    for event in events:
+        if not event.start_time:
+            continue
+        start_local = (
+            event.start_time.replace(tzinfo=local_tz)
+            if event.start_time.tzinfo is None
+            else event.start_time.astimezone(local_tz)
+        )
+        submitted_local = (
+            event.server_time.replace(tzinfo=local_tz)
+            if event.server_time.tzinfo is None
+            else event.server_time.astimezone(local_tz)
+        )
+        if event.participant_id is not None:
+            target_label = f"Bib {event.participant_id}"
+        elif event.group:
+            target_label = f"Group {event.group}"
+        else:
+            target_label = "Manual entry"
+        start_label = start_local.strftime("%H:%M:%S")
+        submitted_label = submitted_local.strftime("%H:%M:%S")
+        start_events.append(
+            {
+                "id": event.id,
+                "start_ms": int(start_local.timestamp() * 1000),
+                "target_label": target_label,
+                "start_label": start_label,
+                "submitted_label": submitted_label,
+                "option_label": f"#{event.id} - {target_label} - start {start_label} (submitted {submitted_label})",
+            }
+        )
+
+    selected_event_id = start_events[0]["id"] if start_events else None
+    return templates.TemplateResponse(
+        "show_timer.html",
+        {
+            "request": request,
+            "race": race,
+            "race_part_id": race_part_id,
+            "start_events": start_events,
+            "selected_event_id": selected_event_id,
+            "user": current_user(request),
+            **back_context(f"/race/{race_id}/part/{race_part_id}", f"< {race_part_id} Results"),
+        },
+    )
+
+
 @app.get("/race/{race_id}/part/{race_part_id}/manage/timing-events", response_class=HTMLResponse)
 def manage_timing_events(
     request: Request, race_id: str, race_part_id: str, db: Session = Depends(get_db)
