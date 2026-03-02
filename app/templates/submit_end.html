@@ -11,18 +11,23 @@
     data-expect-json="true"
   >
     <label>
-      Participants or Groups (comma-separated)
+      Participants or Groups (comma-separated; leave empty to capture server time now and fill bib/group later)
       <input type="text" name="targets" id="end-targets" />
     </label>
-    <p class="small">
-      Leave empty to capture server time now and fill bib/group later.
-    </p>
     <label>
       Time (HH:MM:SS or NOW)
       <input type="text" name="time_value" value="NOW" required />
     </label>
     <button type="submit">Submit End</button>
   </form>
+</div>
+<div class="card">
+  <h2>Pending Bib or Group</h2>
+  <p class="small">
+    End-time submissions without a bib/group appear here. Enter a bib, group, or comma-separated list and press OK.
+  </p>
+  <p id="pending-end-empty" class="small">No pending end times.</p>
+  <div id="pending-end-list" class="pending-end-list"></div>
 </div>
 <div class="card">
   <h2>QR Scanner</h2>
@@ -32,14 +37,6 @@
   <div id="qr-reader" style="width: 100%; max-width: 360px;"></div>
   <p class="small" id="qr-status">Camera idle. Tap “Start Camera” to begin scanning.</p>
   <p class="small">Keep scanning: each QR auto-submits with time NOW.</p>
-</div>
-<div class="card">
-  <h2>Pending Bib or Group</h2>
-  <p class="small">
-    End-time submissions without a bib/group appear here. Enter a bib, group, or comma-separated list and press OK.
-  </p>
-  <p id="pending-end-empty" class="small">No pending end times.</p>
-  <div id="pending-end-list" class="pending-end-list"></div>
 </div>
 {% endblock %}
 
