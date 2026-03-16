@@ -75,7 +75,7 @@
     orderedEvents.forEach((event) => {
       const row = document.createElement('p');
       row.className = 'small';
-      row.textContent = `${event.target_label} - start ${event.start_label} - submitted ${event.submitted_label}`;
+      row.textContent = `${event.target_label} - start ${event.start_label}`;
       timerMetaList.appendChild(row);
     });
   }
