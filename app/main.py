@@ -714,6 +714,16 @@ def create_organiser(
     return RedirectResponse("/manage/organisers", status_code=303)
 
 
+def replace_organiser_races(db: Session, organiser: Organiser, race_ids: list[str]) -> None:
+    unique_race_ids = list(dict.fromkeys(race_ids))
+    organiser.races.clear()
+    # Flush the orphan deletes before adding replacements to avoid unique collisions
+    # on organiser_races when a race stays linked across the update.
+    db.flush()
+    for race_id in unique_race_ids:
+        organiser.races.append(OrganiserRace(race_id=race_id))
+
+
 @app.post("/manage/organisers/{organiser_id}/update")
 def update_organiser(
     request: Request,
@@ -728,9 +738,7 @@ def update_organiser(
         raise HTTPException(status_code=404)
     if password:
         organiser.password_hash = hash_password(password)
-    organiser.races.clear()
-    for race_id in race_ids:
-        organiser.races.append(OrganiserRace(race_id=race_id))
+    replace_organiser_races(db, organiser, race_ids)
     db.commit()
     return RedirectResponse("/manage/organisers", status_code=303)
 
