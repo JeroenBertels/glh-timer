@@ -1364,7 +1364,7 @@ def show_timer_page(
                 "target_label": target_label,
                 "start_label": start_label,
                 "submitted_label": submitted_label,
-                "option_label": f"#{event.id} - {target_label} - start {start_label} (submitted {submitted_label})",
+                "option_label": f"#{event.id} - {target_label} - start {start_label}",
             }
         )
 
