@@ -4,8 +4,8 @@
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
-  "background_color": "#f5f3ef",
-  "theme_color": "#f26b3a",
+  "background_color": "#eef5ef",
+  "theme_color": "#2f8f57",
   "icons": [
     {
       "src": "/static/img/GLHTimer_192.png",
