@@ -17,7 +17,11 @@
     </label>
     <label>
       Timezone
-      <input type="text" name="race_timezone" value="Europe/Brussels" required />
+      <select name="race_timezone" required>
+        {% for timezone_name in race_timezones %}
+        <option value="{{ timezone_name }}" {% if timezone_name == default_race_timezone %}selected{% endif %}>{{ timezone_name }}</option>
+        {% endfor %}
+      </select>
     </label>
     <button type="submit">Add</button>
   </form>

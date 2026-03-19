@@ -401,4 +401,13 @@ button.danger {
     grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
     align-items: end;
   }
+  form.inline > * {
+    min-width: 0;
+  }
+  form.inline input,
+  form.inline select,
+  form.inline textarea {
+    width: 100%;
+    min-width: 0;
+  }
 }

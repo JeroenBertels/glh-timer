@@ -7,7 +7,7 @@ import re
 import zipfile
 from datetime import date, datetime
 import time
-from zoneinfo import ZoneInfo
+from zoneinfo import ZoneInfo, available_timezones
 
 from fastapi import Depends, FastAPI, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, StreamingResponse
@@ -38,6 +38,9 @@ app.mount("/static", StaticFiles(directory="app/static"), name="static")
 
 templates = Jinja2Templates(directory="app/templates")
 templates.env.globals["format_seconds"] = format_seconds
+
+DEFAULT_RACE_TIMEZONE = "Europe/Brussels"
+VALID_RACE_TIMEZONES = tuple(sorted(available_timezones()))
 
 
 def init_db() -> None:
@@ -183,6 +186,23 @@ def normalize_filter_values(values: list[str] | str | None) -> list[str]:
     if isinstance(values, list):
         return [item.strip() for item in values if item.strip()]
     return parse_comma_list(values)
+
+
+def race_timezone_options(selected_timezone: str | None = None) -> list[str]:
+    options: list[str] = []
+    seen: set[str] = set()
+
+    for timezone_name in [DEFAULT_RACE_TIMEZONE, selected_timezone]:
+        if timezone_name and timezone_name not in seen:
+            options.append(timezone_name)
+            seen.add(timezone_name)
+
+    for timezone_name in VALID_RACE_TIMEZONES:
+        if timezone_name not in seen:
+            options.append(timezone_name)
+            seen.add(timezone_name)
+
+    return options
 
 
 def race_timezone(race: Race) -> ZoneInfo:
@@ -422,6 +442,8 @@ def manage_races(request: Request, db: Session = Depends(get_db)):
         {
             "request": request,
             "races": races,
+            "race_timezones": race_timezone_options(),
+            "default_race_timezone": DEFAULT_RACE_TIMEZONE,
             "user": current_user(request),
             **back_context("/", "< Races"),
         },
@@ -453,6 +475,8 @@ def create_race(
             {
                 "request": request,
                 "races": races,
+                "race_timezones": race_timezone_options(),
+                "default_race_timezone": DEFAULT_RACE_TIMEZONE,
                 "user": current_user(request),
                 "error": f"Race ID already exists: {race_id}",
                 **back_context("/", "< Races"),
@@ -474,6 +498,7 @@ def edit_race(request: Request, race_id: str, db: Session = Depends(get_db)):
         {
             "request": request,
             "race": race,
+            "race_timezones": race_timezone_options(race.race_timezone),
             "user": current_user(request),
             **back_context("/manage/races", "< Manage Races"),
         },
