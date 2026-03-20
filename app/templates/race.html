@@ -1,15 +1,15 @@
 {% extends "base.html" %}
 {% block content %}
 <h1>{{ race.race_id }}</h1>
+{% if user and (user.role == "admin" or race.race_id in user.race_ids) %}
 <div class="card">
   <div class="actions">
-    {% if user and (user.role == "admin" or race.race_id in user.race_ids) %}
-      <a class="button" href="/race/{{ race.race_id }}/manage/race-parts">Manage Race Parts</a>
-      <a class="button" href="/race/{{ race.race_id }}/manage/participants">Manage Participants</a>
-      <a class="button ghost" href="/race/{{ race.race_id }}/qrcodes.zip">Download QR Codes</a>
-    {% endif %}
+    <a class="button" href="/race/{{ race.race_id }}/manage/race-parts">Manage Race Parts</a>
+    <a class="button" href="/race/{{ race.race_id }}/manage/participants">Manage Participants</a>
+    <a class="button ghost" href="/race/{{ race.race_id }}/qrcodes.zip">Download QR Codes</a>
   </div>
 </div>
+{% endif %}
 <div class="card">
   <h2>Race Parts</h2>
   <div class="table-wrap">

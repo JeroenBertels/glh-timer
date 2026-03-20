@@ -1,14 +1,14 @@
 {% extends "base.html" %}
 {% block content %}
 <h1>Races</h1>
+{% if user and user.role == "admin" %}
 <div class="card">
   <div class="actions">
-    {% if user and user.role == "admin" %}
-      <a class="button" href="/manage/races">Manage Races</a>
-      <a class="button ghost" href="/manage/organisers">Manage Organisers</a>
-    {% endif %}
+    <a class="button" href="/manage/races">Manage Races</a>
+    <a class="button ghost" href="/manage/organisers">Manage Organisers</a>
   </div>
 </div>
+{% endif %}
 <div class="card">
   <div class="table-wrap">
     <table class="table">
