@@ -130,17 +130,25 @@ def ensure_schema_updates(engine) -> None:
     if "timing_events" not in inspector.get_table_names():
         return
     columns = {column["name"] for column in inspector.get_columns("timing_events")}
-    if "created_by_username" in columns:
-        return
-    statement = text(
-        "ALTER TABLE timing_events ADD COLUMN created_by_username VARCHAR(150)"
-    )
-    try:
-        with engine.begin() as connection:
-            connection.execute(statement)
-    except Exception as exc:  # pragma: no cover - startup race tolerance
-        if "duplicate column" not in str(exc).lower():
-            raise
+    statements = []
+    if "created_by_username" not in columns:
+        statements.append(
+            text("ALTER TABLE timing_events ADD COLUMN created_by_username VARCHAR(150)")
+        )
+    if "pending_resolved" not in columns:
+        statements.append(
+            text(
+                "ALTER TABLE timing_events "
+                "ADD COLUMN pending_resolved BOOLEAN NOT NULL DEFAULT FALSE"
+            )
+        )
+    for statement in statements:
+        try:
+            with engine.begin() as connection:
+                connection.execute(statement)
+        except Exception as exc:  # pragma: no cover - startup race tolerance
+            if "duplicate column" not in str(exc).lower():
+                raise
 
 
 def parse_comma_list(value: str) -> list[str]:
@@ -266,6 +274,7 @@ def load_pending_end_events(
             TimingEvent.participant_id.is_(None),
             TimingEvent.group.is_(None),
             TimingEvent.end_time.is_not(None),
+            TimingEvent.pending_resolved.is_(False),
             TimingEvent.created_by_username == created_by_username,
         )
         .order_by(TimingEvent.server_time.desc())
@@ -1561,6 +1570,44 @@ def create_timing_event(
     return event
 
 
+def update_pending_end_event_targets(
+    db: Session,
+    event: TimingEvent,
+    targets: str,
+    username: str,
+    confirm_empty: bool = False,
+) -> int:
+    target_tokens = parse_target_list(targets)
+    if not target_tokens:
+        if not confirm_empty:
+            raise HTTPException(status_code=400, detail="Participant or group required")
+        event.pending_resolved = True
+        return 0
+
+    event.pending_resolved = False
+    first_participant_id, first_group = parse_target_token(target_tokens[0])
+    event.participant_id = first_participant_id
+    event.group = first_group
+
+    for token in target_tokens[1:]:
+        participant_id, group = parse_target_token(token)
+        duplicate = TimingEvent(
+            race_id=event.race_id,
+            race_part_id=event.race_part_id,
+            participant_id=participant_id,
+            group=group,
+            client_time=event.client_time,
+            server_time=event.server_time,
+            duration_seconds=event.duration_seconds,
+            start_time=event.start_time,
+            end_time=event.end_time,
+            created_by_username=username,
+        )
+        db.add(duplicate)
+
+    return len(target_tokens)
+
+
 @app.post("/race/{race_id}/part/{race_part_id}/manage/timing-events")
 def create_timing_event_manual(
     request: Request,
@@ -2191,7 +2238,8 @@ def submit_end_targets(
     race_id: str,
     race_part_id: str,
     event_id: int,
-    targets: str = Form(...),
+    targets: str = Form(""),
+    confirm_empty: bool = Form(False),
     db: Session = Depends(get_db),
 ):
     require_organiser(request, race_id)
@@ -2216,32 +2264,16 @@ def submit_end_targets(
         raise HTTPException(status_code=404)
     if event.participant_id is not None or event.group is not None or event.end_time is None:
         raise HTTPException(status_code=404)
-    target_tokens = parse_target_list(targets)
-    if not target_tokens:
-        raise HTTPException(status_code=400, detail="Participant or group required")
-
-    first_participant_id, first_group = parse_target_token(target_tokens[0])
-    event.participant_id = first_participant_id
-    event.group = first_group
-
-    for token in target_tokens[1:]:
-        participant_id, group = parse_target_token(token)
-        duplicate = TimingEvent(
-            race_id=event.race_id,
-            race_part_id=event.race_part_id,
-            participant_id=participant_id,
-            group=group,
-            client_time=event.client_time,
-            server_time=event.server_time,
-            duration_seconds=event.duration_seconds,
-            start_time=event.start_time,
-            end_time=event.end_time,
-            created_by_username=username,
-        )
-        db.add(duplicate)
+    count = update_pending_end_event_targets(
+        db,
+        event,
+        targets,
+        username,
+        confirm_empty=confirm_empty,
+    )
 
     db.commit()
-    return JSONResponse({"ok": True, "event_id": event_id, "count": len(target_tokens)})
+    return JSONResponse({"ok": True, "event_id": event_id, "count": count})
 
 
 @app.get("/race/{race_id}/part/{race_part_id}/submit-duration", response_class=HTMLResponse)
