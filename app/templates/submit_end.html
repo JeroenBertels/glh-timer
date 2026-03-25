@@ -116,7 +116,11 @@
 
     const input = document.createElement('input');
     input.type = 'text';
+    input.inputMode = 'tel';
+    input.autocomplete = 'off';
+    input.spellcheck = false;
     input.placeholder = pendingTargetPlaceholder;
+    input.setAttribute('enterkeyhint', 'done');
     input.setAttribute('aria-label', `Targets for event ${item.id}`);
 
     const button = document.createElement('button');
