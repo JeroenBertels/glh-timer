@@ -256,8 +256,29 @@ button.danger {
 }
 
 .pending-end-item .actions {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.pending-counter {
+  flex: 0 0 1.5rem;
+  min-width: 1.5rem;
+  font-weight: 700;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.pending-end-item .actions input {
+  flex: 1 1 auto;
+  width: auto;
+  min-width: 0;
+}
+
+.pending-end-item .actions button {
+  flex: 0 0 auto;
+  white-space: nowrap;
 }
 
 .flash {
