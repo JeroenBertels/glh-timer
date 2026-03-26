@@ -122,6 +122,22 @@ class ActionCardVisibilityTests(unittest.TestCase):
         self.assertIn("Show Timer", html)
         self.assertIn('id="submit-end-timer-panel" hidden', html)
 
+    def test_submit_end_script_uses_stacked_pending_event_rows(self) -> None:
+        html = self.render(
+            "submit_end.html",
+            race=self.race,
+            race_part_id=self.part.race_part_id,
+            pending_end_events=[],
+            start_events=[],
+            selected_event_id=None,
+            user={"role": "admin", "race_ids": [self.race.race_id]},
+        )
+
+        self.assertIn("pending-end-meta", html)
+        self.assertIn("pending-end-controls", html)
+        self.assertIn("pending-end-caption", html)
+        self.assertIn("row.append(meta, caption, controls);", html)
+
 
 if __name__ == "__main__":
     unittest.main()
