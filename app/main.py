@@ -82,6 +82,7 @@ def init_db() -> None:
                 races = db.scalars(select(Race)).all()
                 for race in races:
                     ensure_overall_race_part(db, race.race_id)
+                backfill_pending_end_counters(db)
                 db.commit()
             return
         except Exception as exc:  # pragma: no cover - startup retry
@@ -169,6 +170,10 @@ def ensure_schema_updates(engine) -> None:
                 "ALTER TABLE timing_events "
                 "ADD COLUMN pending_resolved BOOLEAN NOT NULL DEFAULT FALSE"
             )
+        )
+    if "pending_counter" not in columns:
+        statements.append(
+            text("ALTER TABLE timing_events ADD COLUMN pending_counter INTEGER")
         )
     for statement in statements:
         try:
@@ -286,6 +291,7 @@ def serialize_pending_end_event(event: TimingEvent, race: Race) -> dict:
     )
     return {
         "id": event.id,
+        "pending_counter": event.pending_counter,
         "end_time": end_time,
         "server_time": event.server_time.astimezone(local_tz).strftime("%H:%M:%S"),
     }
@@ -305,8 +311,74 @@ def load_pending_end_events(
             TimingEvent.pending_resolved.is_(False),
             TimingEvent.created_by_username == created_by_username,
         )
-        .order_by(TimingEvent.server_time.desc())
+        .order_by(TimingEvent.pending_counter.asc(), TimingEvent.id.asc())
     ).all()
+
+
+def next_pending_end_counter(
+    db: Session, race_id: str, race_part_id: str, created_by_username: str
+) -> int:
+    existing_counters = [
+        value
+        for value in db.scalars(
+            select(TimingEvent.pending_counter).where(
+                TimingEvent.race_id == race_id,
+                TimingEvent.race_part_id == race_part_id,
+                TimingEvent.participant_id.is_(None),
+                TimingEvent.group.is_(None),
+                TimingEvent.end_time.is_not(None),
+                TimingEvent.pending_resolved.is_(False),
+                TimingEvent.created_by_username == created_by_username,
+                TimingEvent.pending_counter.is_not(None),
+            )
+        ).all()
+        if value is not None
+    ]
+    return (max(existing_counters) if existing_counters else 0) + 1
+
+
+def backfill_pending_end_counters(db: Session) -> None:
+    pending_events = db.scalars(
+        select(TimingEvent)
+        .where(
+            TimingEvent.participant_id.is_(None),
+            TimingEvent.group.is_(None),
+            TimingEvent.end_time.is_not(None),
+            TimingEvent.pending_resolved.is_(False),
+            TimingEvent.pending_counter.is_(None),
+        )
+        .order_by(
+            TimingEvent.created_by_username.asc(),
+            TimingEvent.race_id.asc(),
+            TimingEvent.race_part_id.asc(),
+            TimingEvent.id.asc(),
+        )
+    ).all()
+    next_counter_by_bucket: dict[tuple[str, str, str | None], int] = {}
+    for event in pending_events:
+        bucket = (event.created_by_username or "", event.race_id, event.race_part_id)
+        if bucket not in next_counter_by_bucket:
+            existing_counters = [
+                value
+                for value in db.scalars(
+                    select(TimingEvent.pending_counter).where(
+                        TimingEvent.created_by_username == event.created_by_username,
+                        TimingEvent.race_id == event.race_id,
+                        TimingEvent.race_part_id == event.race_part_id,
+                        TimingEvent.participant_id.is_(None),
+                        TimingEvent.group.is_(None),
+                        TimingEvent.end_time.is_not(None),
+                        TimingEvent.pending_resolved.is_(False),
+                        TimingEvent.pending_counter.is_not(None),
+                    )
+                ).all()
+                if value is not None
+            ]
+            next_counter_by_bucket[bucket] = (
+                max(existing_counters) if existing_counters else 0
+            ) + 1
+        event.pending_counter = next_counter_by_bucket[bucket]
+        next_counter_by_bucket[bucket] += 1
 
 
 def compute_participant_duration(
@@ -1580,6 +1652,7 @@ def create_timing_event(
     start_time: datetime | None,
     end_time: datetime | None,
     created_by_username: str | None = None,
+    pending_counter: int | None = None,
 ) -> TimingEvent:
     server_now = datetime.now(tz=race_timezone(race))
     event = TimingEvent(
@@ -1593,6 +1666,7 @@ def create_timing_event(
         start_time=start_time,
         end_time=end_time,
         created_by_username=created_by_username,
+        pending_counter=pending_counter,
     )
     db.add(event)
     return event
@@ -2244,6 +2318,9 @@ def submit_end(
             start_time=None,
             end_time=end_dt,
             created_by_username=username,
+            pending_counter=next_pending_end_counter(
+                db, race.race_id, race_part_id, username
+            ),
         )
     db.commit()
     if wants_json_response(request):

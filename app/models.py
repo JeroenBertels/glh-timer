@@ -93,3 +93,4 @@ class TimingEvent(Base):
     end_time: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_by_username: Mapped[str | None] = mapped_column(String(150), nullable=True)
     pending_resolved: Mapped[bool] = mapped_column(Boolean, default=False)
+    pending_counter: Mapped[int | None] = mapped_column(Integer, nullable=True)
