@@ -179,17 +179,16 @@
     row.dataset.eventId = item.id;
 
     const caption = document.createElement('p');
-    caption.className = 'small';
+    caption.className = 'small pending-end-caption';
     caption.textContent = item.end_time
-      ? `Time event #${item.id}: end ${item.end_time} (captured ${item.server_time})`
+      ? `Time event #${item.id}: end ${item.end_time}`
       : `Time event #${item.id}: captured ${item.server_time}`;
 
+    const meta = document.createElement('div');
+    meta.className = 'pending-end-meta';
+
     const controls = document.createElement('div');
-    controls.className = 'actions';
-    controls.style.display = 'flex';
-    controls.style.flexWrap = 'nowrap';
-    controls.style.alignItems = 'center';
-    controls.style.gap = '8px';
+    controls.className = 'pending-end-controls';
 
     const counter = document.createElement('strong');
     counter.className = 'pending-counter';
@@ -208,16 +207,9 @@
     input.placeholder = pendingTargetPlaceholder;
     input.setAttribute('enterkeyhint', 'done');
     input.setAttribute('aria-label', `Targets for event ${item.id}`);
-    input.style.flex = '1 1 auto';
-    input.style.width = 'auto';
-    input.style.minWidth = '0';
-
     const button = document.createElement('button');
     button.type = 'button';
     button.textContent = 'OK';
-    button.style.flex = '0 0 auto';
-    button.style.width = 'auto';
-    button.style.whiteSpace = 'nowrap';
     button.addEventListener('click', () => savePendingTargets(item.id, row, input, button));
     input.addEventListener('keydown', (event) => {
       if (event.key === 'Enter') {
@@ -226,12 +218,12 @@
       }
     });
 
-    controls.append(counter);
+    meta.append(counter);
     if (durationLabel) {
-      controls.append(duration);
+      meta.append(duration);
     }
     controls.append(input, button);
-    row.append(caption, controls);
+    row.append(meta, caption, controls);
     pendingList.append(row);
     refreshPendingEmptyState();
   }

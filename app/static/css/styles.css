@@ -255,9 +255,20 @@ button.danger {
   gap: 8px;
 }
 
-.pending-end-item .actions {
+.pending-end-meta {
   display: flex;
-  flex-wrap: nowrap;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.pending-end-caption {
+  margin: 0;
+}
+
+.pending-end-controls {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   gap: 8px;
 }
@@ -276,14 +287,15 @@ button.danger {
   white-space: nowrap;
 }
 
-.pending-end-item .actions input {
+.pending-end-controls input {
   flex: 1 1 auto;
   width: auto;
   min-width: 0;
 }
 
-.pending-end-item .actions button {
+.pending-end-controls button {
   flex: 0 0 auto;
+  width: auto;
   white-space: nowrap;
 }
 
