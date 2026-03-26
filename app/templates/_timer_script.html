@@ -1,0 +1,202 @@
+<script>
+  (() => {
+    const startEvents = {{ start_events | tojson }};
+    const startEventSelect = document.getElementById('start-event-select');
+    const timerCard = document.getElementById('timer-card');
+    const timerDisplay = document.getElementById('timer-display');
+    const fullscreenToggle = document.getElementById('fullscreen-toggle');
+    const timerMetaList = document.getElementById('timer-meta-list');
+    const eventMap = new Map(startEvents.map((event) => [String(event.id), event]));
+
+    function formatElapsed(ms) {
+      const safeMs = Math.max(0, ms);
+      const totalDeciseconds = Math.floor(safeMs / 100);
+      const deciseconds = totalDeciseconds % 10;
+      const totalSeconds = Math.floor(totalDeciseconds / 10);
+      const seconds = totalSeconds % 60;
+      const minutes = Math.floor(totalSeconds / 60) % 60;
+      const hours = Math.floor(totalSeconds / 3600);
+      return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}.${deciseconds}`;
+    }
+
+    function selectedEvent() {
+      if (!startEventSelect) return null;
+      return eventMap.get(startEventSelect.value) || null;
+    }
+
+    function renderMatchingEvents(selected) {
+      if (!timerMetaList) return;
+      if (!selected) {
+        timerMetaList.innerHTML = '';
+        return;
+      }
+      const matchingEvents = startEvents.filter((event) => event.start_label === selected.start_label);
+      const orderedEvents = [
+        selected,
+        ...matchingEvents.filter((event) => event.id !== selected.id),
+      ];
+      timerMetaList.innerHTML = '';
+      orderedEvents.forEach((event) => {
+        const row = document.createElement('p');
+        row.className = 'small';
+        row.textContent = `${event.target_label} - start ${event.start_label}`;
+        timerMetaList.appendChild(row);
+      });
+    }
+
+    function currentElapsedMs() {
+      const event = selectedEvent();
+      if (!event) {
+        return null;
+      }
+      return Date.now() - event.start_ms;
+    }
+
+    function updateTimer() {
+      const elapsedMs = currentElapsedMs();
+      if (elapsedMs === null) {
+        if (timerDisplay) {
+          timerDisplay.textContent = '--:--:--.-';
+        }
+        renderMatchingEvents(null);
+        fitTimerInFullscreen();
+        return;
+      }
+      if (timerDisplay) {
+        timerDisplay.textContent = formatElapsed(elapsedMs);
+      }
+      renderMatchingEvents(selectedEvent());
+      fitTimerInFullscreen();
+    }
+
+    function currentFullscreenElement() {
+      return document.fullscreenElement || document.webkitFullscreenElement || null;
+    }
+
+    function supportsFullscreenApi() {
+      return Boolean(
+        timerCard &&
+        (
+          timerCard.requestFullscreen ||
+          timerCard.webkitRequestFullscreen
+        )
+      );
+    }
+
+    function isTimerFullscreen() {
+      const fullscreenElement = currentFullscreenElement();
+      if (!fullscreenElement || !timerCard) return false;
+      return (
+        fullscreenElement === timerCard ||
+        timerCard.contains(fullscreenElement) ||
+        fullscreenElement.contains(timerCard)
+      );
+    }
+
+    function syncFullscreenState() {
+      if (!timerCard) return;
+      timerCard.classList.toggle('timer-card-fs', isTimerFullscreen());
+    }
+
+    function fitTimerInFullscreen() {
+      if (!timerCard || !timerDisplay) return;
+      if (!isTimerFullscreen()) {
+        timerDisplay.style.fontSize = '';
+        timerDisplay.style.letterSpacing = '';
+        return;
+      }
+      const text = timerDisplay.textContent || '00:00:00.0';
+      const availableWidth = Math.max(240, window.innerWidth - 48);
+      const availableHeight = Math.max(160, window.innerHeight - 48);
+      const charWidthFactor = 0.68;
+      const fontByWidth = availableWidth / (text.length * charWidthFactor);
+      const fontByHeight = availableHeight * 0.52;
+      const size = Math.max(52, Math.min(fontByWidth, fontByHeight));
+      timerDisplay.style.fontSize = `${Math.floor(size)}px`;
+      timerDisplay.style.letterSpacing = `${Math.max(1, Math.floor(size * 0.02))}px`;
+    }
+
+    function refreshFullscreenButton() {
+      if (!fullscreenToggle) return;
+      syncFullscreenState();
+      fitTimerInFullscreen();
+      const fullscreen = isTimerFullscreen();
+      fullscreenToggle.title = fullscreen ? 'Exit full screen' : 'Full screen';
+      fullscreenToggle.setAttribute(
+        'aria-label',
+        fullscreen ? 'Exit full screen' : 'Enter full screen'
+      );
+    }
+
+    function toggleFullscreen() {
+      if (!timerCard) return;
+      try {
+        if (isTimerFullscreen()) {
+          if (document.exitFullscreen) {
+            document.exitFullscreen();
+          } else if (document.webkitExitFullscreen) {
+            document.webkitExitFullscreen();
+          }
+          return;
+        }
+        if (timerCard.requestFullscreen) {
+          timerCard.requestFullscreen();
+        } else if (timerCard.webkitRequestFullscreen) {
+          timerCard.webkitRequestFullscreen();
+        }
+      } catch (error) {
+        // Ignore fullscreen API failures and keep timer working.
+      }
+    }
+
+    async function exitTimerFullscreen() {
+      if (!isTimerFullscreen()) {
+        return;
+      }
+      try {
+        if (document.exitFullscreen) {
+          await document.exitFullscreen();
+        } else if (document.webkitExitFullscreen) {
+          document.webkitExitFullscreen();
+        }
+      } catch (error) {
+        // Ignore fullscreen API failures and keep timer working.
+      }
+    }
+
+    window.glhTimer = {
+      formatElapsed,
+      selectedEvent,
+      currentElapsedMs,
+      currentDurationLabel() {
+        const elapsedMs = currentElapsedMs();
+        return elapsedMs === null ? '' : formatElapsed(elapsedMs);
+      },
+      refresh() {
+        updateTimer();
+        refreshFullscreenButton();
+      },
+      exitFullscreen: exitTimerFullscreen,
+    };
+
+    if (fullscreenToggle) {
+      if (!supportsFullscreenApi()) {
+        fullscreenToggle.style.display = 'none';
+      } else {
+        fullscreenToggle.addEventListener('click', toggleFullscreen);
+        document.addEventListener('fullscreenchange', refreshFullscreenButton);
+        document.addEventListener('webkitfullscreenchange', refreshFullscreenButton);
+        window.addEventListener('resize', fitTimerInFullscreen);
+        refreshFullscreenButton();
+      }
+    }
+
+    if (startEventSelect) {
+      updateTimer();
+      startEventSelect.addEventListener('change', updateTimer);
+      setInterval(updateTimer, 100);
+    } else if (timerDisplay) {
+      timerDisplay.textContent = '--:--:--.-';
+    }
+  })();
+</script>

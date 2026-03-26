@@ -107,6 +107,21 @@ class ActionCardVisibilityTests(unittest.TestCase):
             html,
         )
 
+    def test_submit_end_renders_timer_toggle_card(self) -> None:
+        html = self.render(
+            "submit_end.html",
+            race=self.race,
+            race_part_id=self.part.race_part_id,
+            pending_end_events=[],
+            start_events=[],
+            selected_event_id=None,
+            user={"role": "admin", "race_ids": [self.race.race_id]},
+        )
+
+        self.assertIn('id="toggle-timer"', html)
+        self.assertIn("Show Timer", html)
+        self.assertIn('id="submit-end-timer-panel" hidden', html)
+
 
 if __name__ == "__main__":
     unittest.main()

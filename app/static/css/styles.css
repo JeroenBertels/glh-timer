@@ -270,6 +270,12 @@ button.danger {
   white-space: nowrap;
 }
 
+.pending-duration {
+  flex: 0 0 auto;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
 .pending-end-item .actions input {
   flex: 1 1 auto;
   width: auto;

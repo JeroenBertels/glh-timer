@@ -2,6 +2,19 @@
 {% block content %}
 <h1>Submit End Times</h1>
 <div class="card">
+  <button
+    id="toggle-timer"
+    type="button"
+    aria-controls="submit-end-timer-panel"
+    aria-expanded="false"
+  >
+    Show Timer
+  </button>
+</div>
+<div id="submit-end-timer-panel" hidden>
+  {% include "_timer_cards.html" %}
+</div>
+<div class="card">
   <form
     id="end-form"
     method="post"
@@ -42,11 +55,14 @@
 
 {% block scripts %}
 <script src="https://unpkg.com/html5-qrcode"></script>
+{% include "_timer_script.html" %}
 <script>
   const qrElementId = 'qr-reader';
   const targetInput = document.getElementById('end-targets');
   const endForm = document.getElementById('end-form');
   const startButton = document.getElementById('start-camera');
+  const toggleTimerButton = document.getElementById('toggle-timer');
+  const timerPanel = document.getElementById('submit-end-timer-panel');
   const qrStatus = document.getElementById('qr-status');
   const pendingList = document.getElementById('pending-end-list');
   const pendingEmpty = document.getElementById('pending-end-empty');
@@ -55,10 +71,59 @@
   let qrInstance = null;
   const scanCooldownMs = 5000;
   const recentScans = new Map();
+  const pendingDurationLabels = new Map();
   const pendingTargetPlaceholder = 'Bib, group, or comma-separated list (e.g. 5-7)';
 
   function refreshPendingEmptyState() {
     pendingEmpty.style.display = pendingList.children.length > 0 ? 'none' : 'block';
+  }
+
+  function timerIsVisible() {
+    return Boolean(timerPanel) && !timerPanel.hidden;
+  }
+
+  function syncTimerToggleButton() {
+    if (!toggleTimerButton) {
+      return;
+    }
+    const expanded = timerIsVisible();
+    toggleTimerButton.textContent = expanded ? 'Hide Timer' : 'Show Timer';
+    toggleTimerButton.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+  }
+
+  async function toggleTimerVisibility() {
+    if (!timerPanel) {
+      return;
+    }
+    if (timerIsVisible()) {
+      if (window.glhTimer && typeof window.glhTimer.exitFullscreen === 'function') {
+        await window.glhTimer.exitFullscreen();
+      }
+      timerPanel.hidden = true;
+      syncTimerToggleButton();
+      return;
+    }
+    timerPanel.hidden = false;
+    syncTimerToggleButton();
+    if (window.glhTimer && typeof window.glhTimer.refresh === 'function') {
+      window.glhTimer.refresh();
+    }
+  }
+
+  function capturePendingDurationLabel() {
+    if (!timerIsVisible() || !window.glhTimer) {
+      return '';
+    }
+    if (typeof window.glhTimer.selectedEvent !== 'function') {
+      return '';
+    }
+    if (!window.glhTimer.selectedEvent()) {
+      return '';
+    }
+    if (typeof window.glhTimer.currentDurationLabel !== 'function') {
+      return '';
+    }
+    return window.glhTimer.currentDurationLabel();
   }
 
   async function savePendingTargets(eventId, row, input, button) {
@@ -94,6 +159,7 @@
         return;
       }
       row.remove();
+      pendingDurationLabels.delete(String(eventId));
       refreshPendingEmptyState();
       flashMessage(submitWithoutTargets ? 'Saved without bib/group' : 'Updated');
     } catch (error) {
@@ -128,10 +194,11 @@
     const counter = document.createElement('strong');
     counter.className = 'pending-counter';
     counter.textContent = item.pending_counter ? `${item.pending_counter}` : '';
-    counter.style.flex = '0 0 auto';
-    counter.style.minWidth = '1.5rem';
-    counter.style.textAlign = 'center';
-    counter.style.whiteSpace = 'nowrap';
+
+    const durationLabel = pendingDurationLabels.get(String(item.id)) || '';
+    const duration = document.createElement('strong');
+    duration.className = 'pending-duration';
+    duration.textContent = durationLabel ? `~${durationLabel}` : '';
 
     const input = document.createElement('input');
     input.type = 'text';
@@ -159,7 +226,11 @@
       }
     });
 
-    controls.append(counter, input, button);
+    controls.append(counter);
+    if (durationLabel) {
+      controls.append(duration);
+    }
+    controls.append(input, button);
     row.append(caption, controls);
     pendingList.append(row);
     refreshPendingEmptyState();
@@ -208,6 +279,12 @@
 
   function replacePendingEvents(items) {
     const { drafts, focusedEventId } = capturePendingDrafts();
+    const visibleIds = new Set(items.map((item) => String(item.id)));
+    for (const eventId of Array.from(pendingDurationLabels.keys())) {
+      if (!visibleIds.has(eventId)) {
+        pendingDurationLabels.delete(eventId);
+      }
+    }
     pendingList.innerHTML = '';
     for (const item of items) {
       renderPendingEvent(item);
@@ -242,6 +319,7 @@
 
   async function submitEndForm() {
     const submitWithoutTargets = !targetInput.value.trim();
+    const pendingDurationLabel = submitWithoutTargets ? capturePendingDurationLabel() : '';
     const result = await submitFormAsync(endForm);
     if (!result.ok || result.queued || !submitWithoutTargets) {
       return result;
@@ -250,6 +328,9 @@
       ? result.data.pending_event
       : null;
     if (pendingEvent) {
+      if (pendingDurationLabel) {
+        pendingDurationLabels.set(String(pendingEvent.id), pendingDurationLabel);
+      }
       await syncPendingEvents();
       return result;
     }
@@ -328,7 +409,9 @@
     await submitEndForm();
   });
 
+  syncTimerToggleButton();
   setInterval(syncPendingEvents, 3000);
+  toggleTimerButton.addEventListener('click', toggleTimerVisibility);
   startButton.addEventListener('click', startCamera);
 </script>
 {% endblock %}
