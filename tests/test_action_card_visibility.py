@@ -93,6 +93,10 @@ class ActionCardVisibilityTests(unittest.TestCase):
 
         self.assertIn("Manage Timing Events", html)
         self.assertEqual(html.count('<div class="card">'), 3)
+        self.assertLess(
+            html.index("Manage Timing Events"),
+            html.index("Group filter (multi-select)"),
+        )
 
     def test_submit_start_defaults_to_open_live_timer(self) -> None:
         html = self.render(
