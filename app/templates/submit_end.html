@@ -61,18 +61,6 @@
     pendingEmpty.style.display = pendingList.children.length > 0 ? 'none' : 'block';
   }
 
-  function renumberPendingEvents() {
-    const rows = Array.from(pendingList.querySelectorAll('.pending-end-item'));
-    rows.slice().reverse().forEach((row, index) => {
-      const counter = row.querySelector('.pending-counter');
-      if (!counter) {
-        return;
-      }
-      counter.textContent = `${index + 1}`;
-    });
-    refreshPendingEmptyState();
-  }
-
   async function savePendingTargets(eventId, row, input, button) {
     const targets = input.value.trim();
     const submitWithoutTargets = !targets;
@@ -106,7 +94,7 @@
         return;
       }
       row.remove();
-      renumberPendingEvents();
+      refreshPendingEmptyState();
       flashMessage(submitWithoutTargets ? 'Saved without bib/group' : 'Updated');
     } catch (error) {
       flashMessage('Update failed');
@@ -139,7 +127,7 @@
 
     const counter = document.createElement('strong');
     counter.className = 'pending-counter';
-    counter.textContent = '1';
+    counter.textContent = item.pending_counter ? `${item.pending_counter}` : '';
     counter.style.flex = '0 0 auto';
     counter.style.minWidth = '1.5rem';
     counter.style.textAlign = 'center';
@@ -173,8 +161,8 @@
 
     controls.append(counter, input, button);
     row.append(caption, controls);
-    pendingList.prepend(row);
-    renumberPendingEvents();
+    pendingList.append(row);
+    refreshPendingEmptyState();
   }
 
   function capturePendingDrafts() {
@@ -221,11 +209,11 @@
   function replacePendingEvents(items) {
     const { drafts, focusedEventId } = capturePendingDrafts();
     pendingList.innerHTML = '';
-    for (const item of [...items].reverse()) {
+    for (const item of items) {
       renderPendingEvent(item);
     }
     restorePendingDrafts(drafts, focusedEventId);
-    renumberPendingEvents();
+    refreshPendingEmptyState();
   }
 
   async function syncPendingEvents() {
@@ -262,7 +250,7 @@
       ? result.data.pending_event
       : null;
     if (pendingEvent) {
-      renderPendingEvent(pendingEvent);
+      await syncPendingEvents();
       return result;
     }
     await syncPendingEvents();
