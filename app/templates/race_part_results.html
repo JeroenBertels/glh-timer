@@ -1,6 +1,17 @@
 {% extends "base.html" %}
 {% block content %}
 <h1>{{ race.race_id }} – {{ race_part.race_part_id }}</h1>
+{% if user and (user.role == "admin" or race.race_id in user.race_ids) and not race_part.is_overall %}
+<div class="card">
+  <div class="actions">
+    <a class="button" href="/race/{{ race.race_id }}/part/{{ race_part.race_part_id }}/manage/timing-events">Manage Timing Events</a>
+    <a class="button" href="/race/{{ race.race_id }}/part/{{ race_part.race_part_id }}/submit-start">Submit Start Times</a>
+    <a class="button" href="/race/{{ race.race_id }}/part/{{ race_part.race_part_id }}/submit-end">Submit End Times</a>
+    <a class="button" href="/race/{{ race.race_id }}/part/{{ race_part.race_part_id }}/submit-duration">Submit Durations</a>
+    <a class="button" href="/race/{{ race.race_id }}/part/{{ race_part.race_part_id }}/timer">Show Timer</a>
+  </div>
+</div>
+{% endif %}
 <div class="card">
   <form method="get" action="/race/{{ race.race_id }}/part/{{ race_part.race_part_id }}">
     <label>
@@ -25,17 +36,6 @@
     </div>
   </form>
 </div>
-{% if user and (user.role == "admin" or race.race_id in user.race_ids) and not race_part.is_overall %}
-<div class="card">
-  <div class="actions">
-    <a class="button" href="/race/{{ race.race_id }}/part/{{ race_part.race_part_id }}/manage/timing-events">Manage Timing Events</a>
-    <a class="button" href="/race/{{ race.race_id }}/part/{{ race_part.race_part_id }}/submit-start">Submit Start Times</a>
-    <a class="button" href="/race/{{ race.race_id }}/part/{{ race_part.race_part_id }}/submit-end">Submit End Times</a>
-    <a class="button" href="/race/{{ race.race_id }}/part/{{ race_part.race_part_id }}/submit-duration">Submit Durations</a>
-    <a class="button" href="/race/{{ race.race_id }}/part/{{ race_part.race_part_id }}/timer">Show Timer</a>
-  </div>
-</div>
-{% endif %}
 <div class="card">
   {% set extra_cols = (parts | rejectattr('is_overall') | list | length) if race_part.is_overall else 0 %}
   {% set colspan_count = 5 + extra_cols %}
