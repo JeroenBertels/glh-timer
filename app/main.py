@@ -282,6 +282,72 @@ def group_name_error(group: str) -> str:
     )
 
 
+def serialize_start_timer_event(event: TimingEvent, local_tz: ZoneInfo) -> dict | None:
+    if not event.start_time:
+        return None
+    start_local = (
+        event.start_time.replace(tzinfo=local_tz)
+        if event.start_time.tzinfo is None
+        else event.start_time.astimezone(local_tz)
+    )
+    submitted_local = (
+        event.server_time.replace(tzinfo=local_tz)
+        if event.server_time.tzinfo is None
+        else event.server_time.astimezone(local_tz)
+    )
+    if event.participant_id is not None:
+        target_label = f"Bib {event.participant_id}"
+    elif event.group:
+        target_label = f"Group {event.group}"
+    else:
+        target_label = "Manual entry"
+    start_label = start_local.strftime("%H:%M:%S")
+    submitted_label = submitted_local.strftime("%H:%M:%S")
+    return {
+        "id": event.id,
+        "start_ms": int(start_local.timestamp() * 1000),
+        "target_label": target_label,
+        "start_label": start_label,
+        "submitted_label": submitted_label,
+        "option_label": f"#{event.id} - {target_label} - start {start_label}",
+    }
+
+
+def load_start_timer_events(db: Session, race: Race, race_part_id: str) -> list[dict]:
+    local_tz = race_timezone(race)
+    events = db.scalars(
+        select(TimingEvent)
+        .where(
+            TimingEvent.race_id == race.race_id,
+            TimingEvent.race_part_id == race_part_id,
+            TimingEvent.start_time.is_not(None),
+        )
+        .order_by(TimingEvent.server_time.desc(), TimingEvent.id.desc())
+    ).all()
+
+    start_events: list[dict] = []
+    for event in events:
+        serialized = serialize_start_timer_event(event, local_tz)
+        if serialized:
+            start_events.append(serialized)
+    return start_events
+
+
+def selected_start_timer_event_id(
+    start_events: list[dict], requested_event_id: int | None = None
+) -> int | None:
+    selected_event_id = start_events[0]["id"] if start_events else None
+    if requested_event_id is None:
+        return selected_event_id
+    matching_event = next(
+        (item for item in start_events if item["id"] == requested_event_id),
+        None,
+    )
+    if matching_event:
+        return requested_event_id
+    return selected_event_id
+
+
 def serialize_pending_end_event(event: TimingEvent, race: Race) -> dict:
     local_tz = race_timezone(race)
     end_time = (
@@ -1458,55 +1524,8 @@ def show_timer_page(
     if not part or part.is_overall:
         raise HTTPException(status_code=404)
 
-    local_tz = race_timezone(race)
-    events = db.scalars(
-        select(TimingEvent)
-        .where(
-            TimingEvent.race_id == race_id,
-            TimingEvent.race_part_id == race_part_id,
-            TimingEvent.start_time.is_not(None),
-        )
-        .order_by(TimingEvent.server_time.desc(), TimingEvent.id.desc())
-    ).all()
-
-    start_events: list[dict] = []
-    for event in events:
-        if not event.start_time:
-            continue
-        start_local = (
-            event.start_time.replace(tzinfo=local_tz)
-            if event.start_time.tzinfo is None
-            else event.start_time.astimezone(local_tz)
-        )
-        submitted_local = (
-            event.server_time.replace(tzinfo=local_tz)
-            if event.server_time.tzinfo is None
-            else event.server_time.astimezone(local_tz)
-        )
-        if event.participant_id is not None:
-            target_label = f"Bib {event.participant_id}"
-        elif event.group:
-            target_label = f"Group {event.group}"
-        else:
-            target_label = "Manual entry"
-        start_label = start_local.strftime("%H:%M:%S")
-        submitted_label = submitted_local.strftime("%H:%M:%S")
-        start_events.append(
-            {
-                "id": event.id,
-                "start_ms": int(start_local.timestamp() * 1000),
-                "target_label": target_label,
-                "start_label": start_label,
-                "submitted_label": submitted_label,
-                "option_label": f"#{event.id} - {target_label} - start {start_label}",
-            }
-        )
-
-    selected_event_id = start_events[0]["id"] if start_events else None
-    if event_id is not None:
-        matching_event = next((item for item in start_events if item["id"] == event_id), None)
-        if matching_event:
-            selected_event_id = event_id
+    start_events = load_start_timer_events(db, race, race_part_id)
+    selected_event_id = selected_start_timer_event_id(start_events, event_id)
     return templates.TemplateResponse(
         "show_timer.html",
         {
@@ -2225,6 +2244,7 @@ def submit_end_form(
     )
     if not part or part.is_overall:
         raise HTTPException(status_code=404)
+    start_events = load_start_timer_events(db, race, race_part_id)
     pending_end_events = load_pending_end_events(db, race_id, race_part_id, username)
     return templates.TemplateResponse(
         "submit_end.html",
@@ -2232,6 +2252,8 @@ def submit_end_form(
             "request": request,
             "race": race,
             "race_part_id": race_part_id,
+            "start_events": start_events,
+            "selected_event_id": selected_start_timer_event_id(start_events),
             "pending_end_events": [
                 serialize_pending_end_event(event, race) for event in pending_end_events
             ],

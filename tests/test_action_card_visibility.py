@@ -94,6 +94,34 @@ class ActionCardVisibilityTests(unittest.TestCase):
         self.assertIn("Manage Timing Events", html)
         self.assertEqual(html.count('<div class="card">'), 3)
 
+    def test_submit_start_defaults_to_open_live_timer(self) -> None:
+        html = self.render(
+            "submit_start.html",
+            race=self.race,
+            race_part_id=self.part.race_part_id,
+            user={"role": "admin", "race_ids": [self.race.race_id]},
+        )
+
+        self.assertIn(
+            '<input type="checkbox" name="auto_show_timer" value="true" checked />',
+            html,
+        )
+
+    def test_submit_end_renders_timer_toggle_card(self) -> None:
+        html = self.render(
+            "submit_end.html",
+            race=self.race,
+            race_part_id=self.part.race_part_id,
+            pending_end_events=[],
+            start_events=[],
+            selected_event_id=None,
+            user={"role": "admin", "race_ids": [self.race.race_id]},
+        )
+
+        self.assertIn('id="toggle-timer"', html)
+        self.assertIn("Show Timer", html)
+        self.assertIn('id="submit-end-timer-panel" hidden', html)
+
 
 if __name__ == "__main__":
     unittest.main()

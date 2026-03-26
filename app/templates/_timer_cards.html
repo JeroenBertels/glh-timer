@@ -1,0 +1,31 @@
+<div class="card">
+  {% if start_events %}
+    <label>
+      Start Time Event
+      <select id="start-event-select">
+        {% for event in start_events %}
+          <option value="{{ event.id }}" {% if selected_event_id == event.id %}selected{% endif %}>{{ event.option_label }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <div id="timer-meta-list" class="timer-meta-list"></div>
+  {% else %}
+    <p class="small">No start time events submitted yet for this race part.</p>
+  {% endif %}
+</div>
+<div id="timer-card" class="card timer-card">
+  <div id="timer-panel" class="timer-live-row">
+    <div id="timer-display" class="digital-timer">00:00:00.0</div>
+    <button
+      id="fullscreen-toggle"
+      class="timer-fullscreen-toggle"
+      type="button"
+      title="Full screen"
+      aria-label="Enter full screen"
+    >
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M3.5 3.5H9M15 3.5H20.5M20.5 3.5V9M20.5 15V20.5M3.5 20.5H9M15 20.5H20.5M3.5 3.5V9M3.5 15V20.5" />
+      </svg>
+    </button>
+  </div>
+</div>
