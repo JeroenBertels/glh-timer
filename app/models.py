@@ -7,7 +7,12 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.db import Base
 
 
-class Race(Base):
+class SoftDeleteMixin:
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    deleted_by: Mapped[str | None] = mapped_column(String(150), nullable=True)
+
+
+class Race(SoftDeleteMixin, Base):
     __tablename__ = "races"
 
     race_id: Mapped[str] = mapped_column(String(200), primary_key=True)
@@ -25,7 +30,7 @@ class Race(Base):
     )
 
 
-class RacePart(Base):
+class RacePart(SoftDeleteMixin, Base):
     __tablename__ = "race_parts"
     __table_args__ = (UniqueConstraint("race_id", "race_part_id", name="uq_race_part"),)
 
@@ -38,7 +43,7 @@ class RacePart(Base):
     race: Mapped[Race] = relationship("Race", back_populates="race_parts")
 
 
-class Participant(Base):
+class Participant(SoftDeleteMixin, Base):
     __tablename__ = "participants"
     __table_args__ = (UniqueConstraint("race_id", "participant_id", name="uq_participant"),)
 
@@ -78,7 +83,7 @@ class OrganiserRace(Base):
     race: Mapped[Race] = relationship("Race", back_populates="organisers")
 
 
-class TimingEvent(Base):
+class TimingEvent(SoftDeleteMixin, Base):
     __tablename__ = "timing_events"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)

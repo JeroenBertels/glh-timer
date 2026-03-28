@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Archived Timing Events</h1>
+<div class="card">
+  <div class="table-wrap">
+    <table class="table">
+    <thead>
+      <tr>
+        <th>ID</th>
+        <th>Bib</th>
+        <th>Group</th>
+        <th>Duration</th>
+        <th>Start</th>
+        <th>End</th>
+        <th>Server Time</th>
+        <th>Archived At</th>
+        <th>Archived By</th>
+        <th>Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for event in events %}
+      <tr>
+        <td>{{ event.id }}</td>
+        <td>{{ event.participant_id }}</td>
+        <td>{{ event.group }}</td>
+        <td>
+          {% if event.duration_seconds is not none %}
+          {{ format_seconds(event.duration_seconds) }}
+          {% endif %}
+        </td>
+        <td>{{ event.start_time }}</td>
+        <td>{{ event.end_time }}</td>
+        <td>{{ event.server_time }}</td>
+        <td>{{ event.deleted_at }}</td>
+        <td>{{ event.deleted_by }}</td>
+        <td class="actions">
+          <form method="post" action="/race/{{ race.race_id }}/part/{{ race_part_id }}/manage/timing-events/{{ event.id }}/restore">
+            <button type="submit">Restore</button>
+          </form>
+          <form method="post" action="/race/{{ race.race_id }}/part/{{ race_part_id }}/manage/timing-events/{{ event.id }}/permanent-delete">
+            <button class="danger" type="submit">Delete Permanently</button>
+          </form>
+        </td>
+      </tr>
+      {% else %}
+      <tr>
+        <td colspan="10" class="small">No archived timing events.</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

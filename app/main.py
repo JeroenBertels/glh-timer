@@ -14,9 +14,9 @@ from fastapi import Depends, FastAPI, File, Form, HTTPException, Query, Request,
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-from sqlalchemy import inspect, select, text
+from sqlalchemy import event, inspect, select, text
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, with_loader_criteria
 from starlette.middleware.sessions import SessionMiddleware
 
 from app.db import Base, SessionLocal, get_db, get_engine
@@ -69,6 +69,19 @@ templates.TemplateResponse = compatible_template_response
 
 DEFAULT_RACE_TIMEZONE = "Europe/Brussels"
 VALID_RACE_TIMEZONES = tuple(sorted(available_timezones()))
+SOFT_DELETE_MODELS = (Race, RacePart, Participant, TimingEvent)
+
+
+@event.listens_for(Session, "do_orm_execute")
+def hide_archived_records(execute_state) -> None:
+    if not execute_state.is_select or execute_state.execution_options.get("include_deleted", False):
+        return
+    statement = execute_state.statement
+    for model in SOFT_DELETE_MODELS:
+        statement = statement.options(
+            with_loader_criteria(model, lambda cls: cls.deleted_at.is_(None), include_aliases=True)
+        )
+    execute_state.statement = statement
 
 
 def init_db() -> None:
@@ -109,6 +122,24 @@ def current_username(request: Request) -> str:
     return str(username)
 
 
+def utc_now() -> datetime:
+    return datetime.now(tz=ZoneInfo("UTC"))
+
+
+def with_deleted(statement):
+    return statement.execution_options(include_deleted=True)
+
+
+def archive_record(record: Any, username: str, archived_at: datetime | None = None) -> None:
+    record.deleted_at = archived_at or utc_now()
+    record.deleted_by = username
+
+
+def restore_record(record: Any) -> None:
+    record.deleted_at = None
+    record.deleted_by = None
+
+
 def back_context(url: str | None, label: str | None = None) -> dict:
     if not url:
         return {"back_url": None, "back_label": None}
@@ -135,6 +166,129 @@ def require_organiser(request: Request, race_id: str | None = None) -> None:
     raise HTTPException(status_code=403)
 
 
+def archive_race(db: Session, race: Race, username: str) -> None:
+    archived_at = utc_now()
+    archive_record(race, username, archived_at)
+    for part in db.scalars(select(RacePart).where(RacePart.race_id == race.race_id)).all():
+        archive_record(part, username, archived_at)
+    for participant in db.scalars(
+        select(Participant).where(Participant.race_id == race.race_id)
+    ).all():
+        archive_record(participant, username, archived_at)
+    for event in db.scalars(select(TimingEvent).where(TimingEvent.race_id == race.race_id)).all():
+        archive_record(event, username, archived_at)
+
+
+def restore_race(db: Session, race: Race) -> None:
+    restore_record(race)
+    for part in db.scalars(
+        with_deleted(
+            select(RacePart).where(
+                RacePart.race_id == race.race_id,
+                RacePart.deleted_at.is_not(None),
+            )
+        )
+    ).all():
+        restore_record(part)
+    for participant in db.scalars(
+        with_deleted(
+            select(Participant).where(
+                Participant.race_id == race.race_id,
+                Participant.deleted_at.is_not(None),
+            )
+        )
+    ).all():
+        restore_record(participant)
+    for event in db.scalars(
+        with_deleted(
+            select(TimingEvent).where(
+                TimingEvent.race_id == race.race_id,
+                TimingEvent.deleted_at.is_not(None),
+            )
+        )
+    ).all():
+        restore_record(event)
+
+
+def permanently_delete_race(db: Session, race: Race) -> None:
+    db.query(TimingEvent).filter(TimingEvent.race_id == race.race_id).delete(
+        synchronize_session=False
+    )
+    db.query(RacePart).filter(RacePart.race_id == race.race_id).delete(synchronize_session=False)
+    db.query(Participant).filter(Participant.race_id == race.race_id).delete(
+        synchronize_session=False
+    )
+    db.query(OrganiserRace).filter(OrganiserRace.race_id == race.race_id).delete(
+        synchronize_session=False
+    )
+    db.delete(race)
+
+
+def archive_race_part(db: Session, part: RacePart, username: str) -> None:
+    archived_at = utc_now()
+    archive_record(part, username, archived_at)
+    for event in db.scalars(
+        select(TimingEvent).where(
+            TimingEvent.race_id == part.race_id,
+            TimingEvent.race_part_id == part.race_part_id,
+        )
+    ).all():
+        archive_record(event, username, archived_at)
+
+
+def restore_race_part(db: Session, part: RacePart) -> None:
+    restore_record(part)
+    for event in db.scalars(
+        with_deleted(
+            select(TimingEvent).where(
+                TimingEvent.race_id == part.race_id,
+                TimingEvent.race_part_id == part.race_part_id,
+                TimingEvent.deleted_at.is_not(None),
+            )
+        )
+    ).all():
+        restore_record(event)
+
+
+def permanently_delete_race_part(db: Session, part: RacePart) -> None:
+    db.query(TimingEvent).filter(
+        TimingEvent.race_id == part.race_id,
+        TimingEvent.race_part_id == part.race_part_id,
+    ).delete(synchronize_session=False)
+    db.delete(part)
+
+
+def archived_race(race_id: str, db: Session) -> Race | None:
+    return db.scalar(
+        with_deleted(select(Race).where(Race.race_id == race_id, Race.deleted_at.is_not(None)))
+    )
+
+
+def archived_race_part(part_id: int, db: Session) -> RacePart | None:
+    return db.scalar(
+        with_deleted(select(RacePart).where(RacePart.id == part_id, RacePart.deleted_at.is_not(None)))
+    )
+
+
+def archived_participant(participant_pk: int, db: Session) -> Participant | None:
+    return db.scalar(
+        with_deleted(
+            select(Participant).where(
+                Participant.id == participant_pk,
+                Participant.deleted_at.is_not(None),
+            )
+        )
+    )
+
+
+def archived_timing_event(event_id: int, db: Session) -> TimingEvent | None:
+    return db.scalar(
+        with_deleted(
+            select(TimingEvent).where(TimingEvent.id == event_id, TimingEvent.deleted_at.is_not(None))
+        )
+    )
+
+
 def ensure_overall_race_part(db: Session, race_id: str) -> None:
     existing = db.scalar(
         select(RacePart).where(
@@ -156,7 +310,8 @@ def ensure_overall_race_part(db: Session, race_id: str) -> None:
 
 def ensure_schema_updates(engine) -> None:
     inspector = inspect(engine)
-    if "timing_events" not in inspector.get_table_names():
+    table_names = set(inspector.get_table_names())
+    if "timing_events" not in table_names:
         return
     columns = {column["name"] for column in inspector.get_columns("timing_events")}
     statements = []
@@ -175,6 +330,18 @@ def ensure_schema_updates(engine) -> None:
         statements.append(
             text("ALTER TABLE timing_events ADD COLUMN pending_counter INTEGER")
         )
+    for table_name in ("races", "race_parts", "participants", "timing_events"):
+        if table_name not in table_names:
+            continue
+        table_columns = {column["name"] for column in inspector.get_columns(table_name)}
+        if "deleted_at" not in table_columns:
+            statements.append(
+                text(f"ALTER TABLE {table_name} ADD COLUMN deleted_at TIMESTAMP WITH TIME ZONE")
+            )
+        if "deleted_by" not in table_columns:
+            statements.append(
+                text(f"ALTER TABLE {table_name} ADD COLUMN deleted_by VARCHAR(150)")
+            )
     for statement in statements:
         try:
             with engine.begin() as connection:
@@ -587,7 +754,11 @@ def login_submit(
 
     organiser = db.scalar(select(Organiser).where(Organiser.username == username))
     if organiser and verify_password(password, organiser.password_hash):
-        race_ids = [link.race_id for link in organiser.races]
+        race_ids = db.scalars(
+            select(Race.race_id)
+            .join(OrganiserRace, OrganiserRace.race_id == Race.race_id)
+            .where(OrganiserRace.organiser_id == organiser.id)
+        ).all()
         request.session["user"] = {
             "role": "organiser",
             "username": organiser.username,
@@ -627,6 +798,25 @@ def manage_races(request: Request, db: Session = Depends(get_db)):
             "default_race_timezone": DEFAULT_RACE_TIMEZONE,
             "user": current_user(request),
             **back_context("/", "< Races"),
+        },
+    )
+
+
+@app.get("/manage/races/archive", response_class=HTMLResponse)
+def manage_archived_races(request: Request, db: Session = Depends(get_db)):
+    require_admin(request)
+    races = db.scalars(
+        with_deleted(
+            select(Race).where(Race.deleted_at.is_not(None)).order_by(Race.deleted_at.desc())
+        )
+    ).all()
+    return templates.TemplateResponse(
+        "manage_archived_races.html",
+        {
+            "request": request,
+            "races": races,
+            "user": current_user(request),
+            **back_context("/manage/races", "< Manage Races"),
         },
     )
 
@@ -704,35 +894,35 @@ def update_race(
     return RedirectResponse("/manage/races", status_code=303)
 
 
+@app.post("/manage/races/{race_id}/archive")
 @app.post("/manage/races/{race_id}/delete")
-def delete_race(request: Request, race_id: str, db: Session = Depends(get_db)):
+def archive_race_route(request: Request, race_id: str, db: Session = Depends(get_db)):
     require_admin(request)
     race = db.get(Race, race_id)
     if race:
-        try:
-            db.query(TimingEvent).filter(TimingEvent.race_id == race_id).delete(
-                synchronize_session=False
-            )
-            db.delete(race)
-            db.commit()
-        except IntegrityError:
-            db.rollback()
-            races = db.scalars(select(Race).order_by(Race.race_date)).all()
-            return templates.TemplateResponse(
-                "manage_races.html",
-                {
-                    "request": request,
-                    "races": races,
-                    "user": current_user(request),
-                    "error": (
-                        f"Unable to delete race '{race_id}' because it is still referenced by "
-                        "other records."
-                    ),
-                    **back_context("/", "< Races"),
-                },
-                status_code=400,
-            )
+        archive_race(db, race, current_username(request))
+        db.commit()
     return RedirectResponse("/manage/races", status_code=303)
+
+
+@app.post("/manage/races/{race_id}/restore")
+def restore_race_route(request: Request, race_id: str, db: Session = Depends(get_db)):
+    require_admin(request)
+    race = archived_race(race_id, db)
+    if race:
+        restore_race(db, race)
+        db.commit()
+    return RedirectResponse("/manage/races/archive", status_code=303)
+
+
+@app.post("/manage/races/{race_id}/permanent-delete")
+def permanently_delete_race_route(request: Request, race_id: str, db: Session = Depends(get_db)):
+    require_admin(request)
+    race = archived_race(race_id, db)
+    if race:
+        permanently_delete_race(db, race)
+        db.commit()
+    return RedirectResponse("/manage/races/archive", status_code=303)
 
 
 @app.get("/manage/races/csv", response_class=StreamingResponse)
@@ -1004,6 +1194,31 @@ def manage_race_parts(request: Request, race_id: str, db: Session = Depends(get_
     )
 
 
+@app.get("/race/{race_id}/manage/race-parts/archive", response_class=HTMLResponse)
+def manage_archived_race_parts(request: Request, race_id: str, db: Session = Depends(get_db)):
+    require_admin(request)
+    race = db.get(Race, race_id)
+    if not race:
+        raise HTTPException(status_code=404)
+    race_parts = db.scalars(
+        with_deleted(
+            select(RacePart)
+            .where(RacePart.race_id == race_id, RacePart.deleted_at.is_not(None))
+            .order_by(RacePart.is_overall, RacePart.race_order)
+        )
+    ).all()
+    return templates.TemplateResponse(
+        "manage_archived_race_parts.html",
+        {
+            "request": request,
+            "race": race,
+            "race_parts": race_parts,
+            "user": current_user(request),
+            **back_context(f"/race/{race_id}/manage/race-parts", "< Manage Race Parts"),
+        },
+    )
+
+
 @app.post("/race/{race_id}/manage/race-parts")
 def create_race_part(
     request: Request,
@@ -1046,14 +1261,41 @@ def create_race_part(
     return RedirectResponse(f"/race/{race_id}/manage/race-parts", status_code=303)
 
 
+@app.post("/race/{race_id}/manage/race-parts/{part_id}/archive")
 @app.post("/race/{race_id}/manage/race-parts/{part_id}/delete")
-def delete_race_part(request: Request, race_id: str, part_id: int, db: Session = Depends(get_db)):
+def archive_race_part_route(
+    request: Request, race_id: str, part_id: int, db: Session = Depends(get_db)
+):
     require_organiser(request, race_id)
     part = db.get(RacePart, part_id)
     if part and not part.is_overall:
-        db.delete(part)
+        archive_race_part(db, part, current_username(request))
         db.commit()
     return RedirectResponse(f"/race/{race_id}/manage/race-parts", status_code=303)
+
+
+@app.post("/race/{race_id}/manage/race-parts/{part_id}/restore")
+def restore_race_part_route(
+    request: Request, race_id: str, part_id: int, db: Session = Depends(get_db)
+):
+    require_admin(request)
+    part = archived_race_part(part_id, db)
+    if part and part.race_id == race_id and not part.is_overall:
+        restore_race_part(db, part)
+        db.commit()
+    return RedirectResponse(f"/race/{race_id}/manage/race-parts/archive", status_code=303)
+
+
+@app.post("/race/{race_id}/manage/race-parts/{part_id}/permanent-delete")
+def permanently_delete_race_part_route(
+    request: Request, race_id: str, part_id: int, db: Session = Depends(get_db)
+):
+    require_admin(request)
+    part = archived_race_part(part_id, db)
+    if part and part.race_id == race_id and not part.is_overall:
+        permanently_delete_race_part(db, part)
+        db.commit()
+    return RedirectResponse(f"/race/{race_id}/manage/race-parts/archive", status_code=303)
 
 
 @app.get("/race/{race_id}/manage/race-parts/{part_id}/edit", response_class=HTMLResponse)
@@ -1201,6 +1443,31 @@ def manage_participants(request: Request, race_id: str, db: Session = Depends(ge
     return render_manage_participants(request, db, race_id)
 
 
+@app.get("/race/{race_id}/manage/participants/archive", response_class=HTMLResponse)
+def manage_archived_participants(request: Request, race_id: str, db: Session = Depends(get_db)):
+    require_admin(request)
+    race = db.get(Race, race_id)
+    if not race:
+        raise HTTPException(status_code=404)
+    participants = db.scalars(
+        with_deleted(
+            select(Participant)
+            .where(Participant.race_id == race_id, Participant.deleted_at.is_not(None))
+            .order_by(Participant.participant_id)
+        )
+    ).all()
+    return templates.TemplateResponse(
+        "manage_archived_participants.html",
+        {
+            "request": request,
+            "race": race,
+            "participants": participants,
+            "user": current_user(request),
+            **back_context(f"/race/{race_id}/manage/participants", "< Manage Participants"),
+        },
+    )
+
+
 @app.post("/race/{race_id}/manage/participants")
 def create_participant(
     request: Request,
@@ -1297,16 +1564,41 @@ def update_participant(
     return RedirectResponse(f"/race/{race_id}/manage/participants", status_code=303)
 
 
+@app.post("/race/{race_id}/manage/participants/{participant_pk}/archive")
 @app.post("/race/{race_id}/manage/participants/{participant_pk}/delete")
-def delete_participant(
+def archive_participant_route(
     request: Request, race_id: str, participant_pk: int, db: Session = Depends(get_db)
 ):
     require_organiser(request, race_id)
     participant = db.get(Participant, participant_pk)
     if participant:
-        db.delete(participant)
+        archive_record(participant, current_username(request))
         db.commit()
     return RedirectResponse(f"/race/{race_id}/manage/participants", status_code=303)
+
+
+@app.post("/race/{race_id}/manage/participants/{participant_pk}/restore")
+def restore_participant_route(
+    request: Request, race_id: str, participant_pk: int, db: Session = Depends(get_db)
+):
+    require_admin(request)
+    participant = archived_participant(participant_pk, db)
+    if participant and participant.race_id == race_id:
+        restore_record(participant)
+        db.commit()
+    return RedirectResponse(f"/race/{race_id}/manage/participants/archive", status_code=303)
+
+
+@app.post("/race/{race_id}/manage/participants/{participant_pk}/permanent-delete")
+def permanently_delete_participant_route(
+    request: Request, race_id: str, participant_pk: int, db: Session = Depends(get_db)
+):
+    require_admin(request)
+    participant = archived_participant(participant_pk, db)
+    if participant and participant.race_id == race_id:
+        db.delete(participant)
+        db.commit()
+    return RedirectResponse(f"/race/{race_id}/manage/participants/archive", status_code=303)
 
 
 @app.get("/race/{race_id}/manage/participants/csv", response_class=StreamingResponse)
@@ -1602,6 +1894,51 @@ def manage_timing_events(
 
 
 @app.get(
+    "/race/{race_id}/part/{race_part_id}/manage/timing-events/archive",
+    response_class=HTMLResponse,
+)
+def manage_archived_timing_events(
+    request: Request, race_id: str, race_part_id: str, db: Session = Depends(get_db)
+):
+    require_admin(request)
+    race = db.get(Race, race_id)
+    if not race:
+        raise HTTPException(status_code=404)
+    part = db.scalar(
+        select(RacePart).where(
+            RacePart.race_id == race_id, RacePart.race_part_id == race_part_id
+        )
+    )
+    if not part or part.is_overall:
+        raise HTTPException(status_code=404)
+    events = db.scalars(
+        with_deleted(
+            select(TimingEvent)
+            .where(
+                TimingEvent.race_id == race_id,
+                TimingEvent.race_part_id == race_part_id,
+                TimingEvent.deleted_at.is_not(None),
+            )
+            .order_by(TimingEvent.server_time.desc())
+        )
+    ).all()
+    return templates.TemplateResponse(
+        "manage_archived_timing_events.html",
+        {
+            "request": request,
+            "race": race,
+            "race_part_id": race_part_id,
+            "events": events,
+            "user": current_user(request),
+            **back_context(
+                f"/race/{race_id}/part/{race_part_id}/manage/timing-events",
+                "< Manage Timing Events",
+            ),
+        },
+    )
+
+
+@app.get(
     "/race/{race_id}/part/{race_part_id}/manage/timing-events/{event_id}/edit",
     response_class=HTMLResponse,
 )
@@ -1808,8 +2145,9 @@ def create_timing_event_manual(
     return RedirectResponse(f"/race/{race_id}/part/{race_part_id}/manage/timing-events", status_code=303)
 
 
+@app.post("/race/{race_id}/part/{race_part_id}/manage/timing-events/{event_id}/archive")
 @app.post("/race/{race_id}/part/{race_part_id}/manage/timing-events/{event_id}/delete")
-def delete_timing_event(
+def archive_timing_event_route(
     request: Request,
     race_id: str,
     race_part_id: str,
@@ -1826,9 +2164,47 @@ def delete_timing_event(
         raise HTTPException(status_code=404)
     event = db.get(TimingEvent, event_id)
     if event:
-        db.delete(event)
+        archive_record(event, current_username(request))
         db.commit()
     return RedirectResponse(f"/race/{race_id}/part/{race_part_id}/manage/timing-events", status_code=303)
+
+
+@app.post("/race/{race_id}/part/{race_part_id}/manage/timing-events/{event_id}/restore")
+def restore_timing_event_route(
+    request: Request,
+    race_id: str,
+    race_part_id: str,
+    event_id: int,
+    db: Session = Depends(get_db),
+):
+    require_admin(request)
+    event = archived_timing_event(event_id, db)
+    if event and event.race_id == race_id and event.race_part_id == race_part_id:
+        restore_record(event)
+        db.commit()
+    return RedirectResponse(
+        f"/race/{race_id}/part/{race_part_id}/manage/timing-events/archive",
+        status_code=303,
+    )
+
+
+@app.post("/race/{race_id}/part/{race_part_id}/manage/timing-events/{event_id}/permanent-delete")
+def permanently_delete_timing_event_route(
+    request: Request,
+    race_id: str,
+    race_part_id: str,
+    event_id: int,
+    db: Session = Depends(get_db),
+):
+    require_admin(request)
+    event = archived_timing_event(event_id, db)
+    if event and event.race_id == race_id and event.race_part_id == race_part_id:
+        db.delete(event)
+        db.commit()
+    return RedirectResponse(
+        f"/race/{race_id}/part/{race_part_id}/manage/timing-events/archive",
+        status_code=303,
+    )
 
 
 @app.get(

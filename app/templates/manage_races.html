@@ -29,6 +29,7 @@
 <div class="card">
   <div class="actions">
     <a class="button ghost" href="/manage/races/csv">Download CSV</a>
+    <a class="button ghost" href="/manage/races/archive">Archived Races</a>
     <form method="post" action="/manage/races/csv" enctype="multipart/form-data">
       <label class="button ghost file-button">
         Upload CSV
@@ -56,8 +57,8 @@
         <td>{{ race.race_timezone }}</td>
         <td class="actions">
           <a class="button ghost" href="/manage/races/{{ race.race_id }}/edit">Edit</a>
-          <form method="post" action="/manage/races/{{ race.race_id }}/delete">
-            <button class="danger" type="submit">Delete</button>
+          <form method="post" action="/manage/races/{{ race.race_id }}/archive">
+            <button type="submit">Archive</button>
           </form>
         </td>
       </tr>
