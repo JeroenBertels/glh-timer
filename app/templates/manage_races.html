@@ -29,13 +29,13 @@
 <div class="card">
   <div class="actions">
     <a class="button ghost" href="/manage/races/csv">Download CSV</a>
-    <a class="button ghost" href="/manage/races/archive">Archived Races</a>
     <form method="post" action="/manage/races/csv" enctype="multipart/form-data">
       <label class="button ghost file-button">
         Upload CSV
         <input type="file" name="file" accept=".csv" required class="file-input" onchange="this.form.submit()" />
       </label>
     </form>
+    <a class="button ghost" href="/manage/races/archive">Archived Races</a>
   </div>
 </div>
 <div class="card">

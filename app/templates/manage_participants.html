@@ -43,15 +43,15 @@
 <div class="card">
   <div class="actions">
     <a class="button ghost" href="/race/{{ race.race_id }}/manage/participants/csv">Download CSV</a>
-    {% if user and user.role == "admin" %}
-    <a class="button ghost" href="/race/{{ race.race_id }}/manage/participants/archive">Archived Participants</a>
-    {% endif %}
     <form method="post" action="/race/{{ race.race_id }}/manage/participants/csv" enctype="multipart/form-data">
       <label class="button ghost file-button">
         Upload CSV
         <input type="file" name="file" accept=".csv" required class="file-input" onchange="this.form.submit()" />
       </label>
     </form>
+    {% if user and user.role == "admin" %}
+    <a class="button ghost" href="/race/{{ race.race_id }}/manage/participants/archive">Archived Participants</a>
+    {% endif %}
   </div>
 </div>
 <div class="card">
