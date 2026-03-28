@@ -1,12 +1,25 @@
 <script>
   (() => {
-    const startEvents = {{ start_events | tojson }};
+    const initialStartEvents = {{ start_events | tojson }};
     const startEventSelect = document.getElementById('start-event-select');
     const timerCard = document.getElementById('timer-card');
     const timerDisplay = document.getElementById('timer-display');
     const fullscreenToggle = document.getElementById('fullscreen-toggle');
     const timerMetaList = document.getElementById('timer-meta-list');
-    const eventMap = new Map(startEvents.map((event) => [String(event.id), event]));
+    const noStartEventsMessage = document.getElementById('timer-no-start-events');
+    const startEventsEndpoint = startEventSelect
+      ? startEventSelect.dataset.startEventsEndpoint || ''
+      : '';
+    const latestOptionValue = 'latest';
+    let startEvents = Array.isArray(initialStartEvents) ? initialStartEvents.slice() : [];
+    const eventMap = new Map();
+
+    function rebuildEventMap() {
+      eventMap.clear();
+      startEvents.forEach((event) => {
+        eventMap.set(String(event.id), event);
+      });
+    }
 
     function formatElapsed(ms) {
       const safeMs = Math.max(0, ms);
@@ -19,8 +32,52 @@
       return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}.${deciseconds}`;
     }
 
+    function syncNoStartEventsMessage() {
+      if (!noStartEventsMessage) {
+        return;
+      }
+      noStartEventsMessage.hidden = startEvents.length > 0;
+    }
+
+    function rebuildStartEventOptions() {
+      if (!startEventSelect) {
+        return;
+      }
+      const previousChoice = startEventSelect.value || latestOptionValue;
+      startEventSelect.innerHTML = '';
+
+      const latestOption = document.createElement('option');
+      latestOption.value = latestOptionValue;
+      latestOption.textContent = 'Last Submitted';
+      startEventSelect.appendChild(latestOption);
+
+      startEvents.forEach((event) => {
+        const option = document.createElement('option');
+        option.value = String(event.id);
+        option.textContent = event.option_label;
+        startEventSelect.appendChild(option);
+      });
+
+      if (previousChoice !== latestOptionValue && eventMap.has(previousChoice)) {
+        startEventSelect.value = previousChoice;
+      } else {
+        startEventSelect.value = latestOptionValue;
+      }
+    }
+
+    function replaceStartEvents(items) {
+      startEvents = Array.isArray(items) ? items.slice() : [];
+      rebuildEventMap();
+      rebuildStartEventOptions();
+      syncNoStartEventsMessage();
+      updateTimer();
+    }
+
     function selectedEvent() {
       if (!startEventSelect) return null;
+      if (startEventSelect.value === latestOptionValue) {
+        return startEvents[0] || null;
+      }
       return eventMap.get(startEventSelect.value) || null;
     }
 
@@ -67,6 +124,31 @@
       }
       renderMatchingEvents(selectedEvent());
       fitTimerInFullscreen();
+    }
+
+    async function syncStartEvents() {
+      if (!startEventsEndpoint) {
+        return;
+      }
+      try {
+        const response = await fetch(startEventsEndpoint, {
+          method: 'get',
+          headers: {
+            Accept: 'application/json',
+            'X-Requested-With': 'XMLHttpRequest',
+          },
+        });
+        if (!response.ok) {
+          return;
+        }
+        const payload = await response.json();
+        if (!payload || !Array.isArray(payload.start_events)) {
+          return;
+        }
+        replaceStartEvents(payload.start_events);
+      } catch (error) {
+        // Keep the last rendered timer state if syncing fails.
+      }
     }
 
     function currentFullscreenElement() {
@@ -179,6 +261,10 @@
       exitFullscreen: exitTimerFullscreen,
     };
 
+    rebuildEventMap();
+    rebuildStartEventOptions();
+    syncNoStartEventsMessage();
+
     if (fullscreenToggle) {
       if (!supportsFullscreenApi()) {
         fullscreenToggle.style.display = 'none';
@@ -194,6 +280,7 @@
     if (startEventSelect) {
       updateTimer();
       startEventSelect.addEventListener('change', updateTimer);
+      setInterval(syncStartEvents, 3000);
       setInterval(updateTimer, 100);
     } else if (timerDisplay) {
       timerDisplay.textContent = '--:--:--.-';

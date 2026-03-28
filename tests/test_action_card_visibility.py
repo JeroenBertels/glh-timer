@@ -118,7 +118,8 @@ class ActionCardVisibilityTests(unittest.TestCase):
             race_part_id=self.part.race_part_id,
             pending_end_events=[],
             start_events=[],
-            selected_event_id=None,
+            selected_start_event_choice="latest",
+            start_events_endpoint=f"/race/{self.race.race_id}/part/{self.part.race_part_id}/timer/start-events",
             user={"role": "admin", "race_ids": [self.race.race_id]},
         )
 
@@ -133,7 +134,8 @@ class ActionCardVisibilityTests(unittest.TestCase):
             race_part_id=self.part.race_part_id,
             pending_end_events=[],
             start_events=[],
-            selected_event_id=None,
+            selected_start_event_choice="latest",
+            start_events_endpoint=f"/race/{self.race.race_id}/part/{self.part.race_part_id}/timer/start-events",
             user={"role": "admin", "race_ids": [self.race.race_id]},
         )
 
@@ -149,13 +151,30 @@ class ActionCardVisibilityTests(unittest.TestCase):
             race_part_id=self.part.race_part_id,
             pending_end_events=[],
             start_events=[],
-            selected_event_id=None,
+            selected_start_event_choice="latest",
+            start_events_endpoint=f"/race/{self.race.race_id}/part/{self.part.race_part_id}/timer/start-events",
             user={"role": "admin", "race_ids": [self.race.race_id]},
         )
 
         self.assertIn('id="pending-end-max-counter"', html)
         self.assertIn("Rank: -", html)
         self.assertIn("refreshPendingMaxCounter()", html)
+
+    def test_submit_end_timer_defaults_to_last_submitted_option(self) -> None:
+        html = self.render(
+            "submit_end.html",
+            race=self.race,
+            race_part_id=self.part.race_part_id,
+            pending_end_events=[],
+            start_events=[],
+            selected_start_event_choice="latest",
+            start_events_endpoint=f"/race/{self.race.race_id}/part/{self.part.race_part_id}/timer/start-events",
+            user={"role": "admin", "race_ids": [self.race.race_id]},
+        )
+
+        self.assertIn('option value="latest" selected', html)
+        self.assertIn("Last Submitted", html)
+        self.assertIn("syncStartEvents", html)
 
 
 if __name__ == "__main__":

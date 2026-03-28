@@ -333,19 +333,25 @@ def load_start_timer_events(db: Session, race: Race, race_part_id: str) -> list[
     return start_events
 
 
-def selected_start_timer_event_id(
-    start_events: list[dict], requested_event_id: int | None = None
-) -> int | None:
-    selected_event_id = start_events[0]["id"] if start_events else None
-    if requested_event_id is None:
-        return selected_event_id
+START_TIMER_LAST_SUBMITTED = "latest"
+
+
+def selected_start_timer_choice(
+    start_events: list[dict], requested_event_id: str | None = None
+) -> str:
+    if requested_event_id in (None, "", START_TIMER_LAST_SUBMITTED):
+        return START_TIMER_LAST_SUBMITTED
+    try:
+        event_id = int(requested_event_id)
+    except (TypeError, ValueError):
+        return START_TIMER_LAST_SUBMITTED
     matching_event = next(
-        (item for item in start_events if item["id"] == requested_event_id),
+        (item for item in start_events if item["id"] == event_id),
         None,
     )
     if matching_event:
-        return requested_event_id
-    return selected_event_id
+        return str(event_id)
+    return START_TIMER_LAST_SUBMITTED
 
 
 def serialize_pending_end_event(event: TimingEvent, race: Race) -> dict:
@@ -1509,7 +1515,7 @@ def show_timer_page(
     request: Request,
     race_id: str,
     race_part_id: str,
-    event_id: int | None = Query(None),
+    event_id: str | None = Query(None),
     db: Session = Depends(get_db),
 ):
     require_organiser(request, race_id)
@@ -1525,7 +1531,7 @@ def show_timer_page(
         raise HTTPException(status_code=404)
 
     start_events = load_start_timer_events(db, race, race_part_id)
-    selected_event_id = selected_start_timer_event_id(start_events, event_id)
+    selected_start_event_choice = selected_start_timer_choice(start_events, event_id)
     return templates.TemplateResponse(
         "show_timer.html",
         {
@@ -1533,11 +1539,33 @@ def show_timer_page(
             "race": race,
             "race_part_id": race_part_id,
             "start_events": start_events,
-            "selected_event_id": selected_event_id,
+            "selected_start_event_choice": selected_start_event_choice,
+            "start_events_endpoint": f"/race/{race_id}/part/{race_part_id}/timer/start-events",
             "user": current_user(request),
             **back_context(f"/race/{race_id}/part/{race_part_id}", f"< {race_part_id} Results"),
         },
     )
+
+
+@app.get("/race/{race_id}/part/{race_part_id}/timer/start-events")
+def show_timer_start_events(
+    request: Request, race_id: str, race_part_id: str, db: Session = Depends(get_db)
+):
+    require_organiser(request, race_id)
+    race = db.get(Race, race_id)
+    if not race:
+        raise HTTPException(status_code=404)
+    part = db.scalar(
+        select(RacePart).where(
+            RacePart.race_id == race_id, RacePart.race_part_id == race_part_id
+        )
+    )
+    if not part or part.is_overall:
+        raise HTTPException(status_code=404)
+    return {
+        "ok": True,
+        "start_events": load_start_timer_events(db, race, race_part_id),
+    }
 
 
 @app.get("/race/{race_id}/part/{race_part_id}/manage/timing-events", response_class=HTMLResponse)
@@ -2253,7 +2281,8 @@ def submit_end_form(
             "race": race,
             "race_part_id": race_part_id,
             "start_events": start_events,
-            "selected_event_id": selected_start_timer_event_id(start_events),
+            "selected_start_event_choice": START_TIMER_LAST_SUBMITTED,
+            "start_events_endpoint": f"/race/{race_id}/part/{race_part_id}/timer/start-events",
             "pending_end_events": [
                 serialize_pending_end_event(event, race) for event in pending_end_events
             ],

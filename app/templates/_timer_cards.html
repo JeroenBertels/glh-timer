@@ -1,17 +1,21 @@
 <div class="card">
-  {% if start_events %}
-    <label>
-      Start Time Event
-      <select id="start-event-select">
-        {% for event in start_events %}
-          <option value="{{ event.id }}" {% if selected_event_id == event.id %}selected{% endif %}>{{ event.option_label }}</option>
-        {% endfor %}
-      </select>
-    </label>
-    <div id="timer-meta-list" class="timer-meta-list"></div>
-  {% else %}
-    <p class="small">No start time events submitted yet for this race part.</p>
-  {% endif %}
+  <label>
+    Start Time Event
+    <select id="start-event-select" data-start-events-endpoint="{{ start_events_endpoint }}">
+      <option value="latest" {% if selected_start_event_choice == "latest" %}selected{% endif %}>Last Submitted</option>
+      {% for event in start_events %}
+        <option value="{{ event.id }}" {% if selected_start_event_choice == (event.id | string) %}selected{% endif %}>{{ event.option_label }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <div id="timer-meta-list" class="timer-meta-list"></div>
+  <p
+    id="timer-no-start-events"
+    class="small"
+    {% if start_events %}hidden{% endif %}
+  >
+    No start time events submitted yet for this race part.
+  </p>
 </div>
 <div id="timer-card" class="card timer-card">
   <div id="timer-panel" class="timer-live-row">
