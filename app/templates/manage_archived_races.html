@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Archived Races</h1>
+<div class="card">
+  <div class="table-wrap">
+    <table class="table">
+    <thead>
+      <tr>
+        <th>Race</th>
+        <th>Date</th>
+        <th>Timezone</th>
+        <th>Archived At</th>
+        <th>Archived By</th>
+        <th>Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for race in races %}
+      <tr>
+        <td>{{ race.race_id }}</td>
+        <td>{{ race.race_date }}</td>
+        <td>{{ race.race_timezone }}</td>
+        <td>{{ race.deleted_at }}</td>
+        <td>{{ race.deleted_by }}</td>
+        <td class="actions">
+          <form method="post" action="/manage/races/{{ race.race_id }}/restore">
+            <button type="submit">Restore</button>
+          </form>
+          <form method="post" action="/manage/races/{{ race.race_id }}/permanent-delete">
+            <button class="danger" type="submit">Delete Permanently</button>
+          </form>
+        </td>
+      </tr>
+      {% else %}
+      <tr>
+        <td colspan="6" class="small">No archived races.</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

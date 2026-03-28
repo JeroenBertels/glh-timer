@@ -232,13 +232,12 @@ button.danger {
   accent-color: var(--accent);
 }
 
-.wave-live-timer {
-  font-family: "Space Grotesk", "Trebuchet MS", sans-serif;
-  font-size: clamp(2rem, 8vw, 4.5rem);
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  color: var(--accent);
+.wave-live-timer-panel {
   margin-bottom: 10px;
+}
+
+.wave-live-timer {
+  line-height: 1;
 }
 
 .pending-end-list {

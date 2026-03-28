@@ -98,6 +98,26 @@ class ActionCardVisibilityTests(unittest.TestCase):
             html.index("Group filter (multi-select)"),
         )
 
+    def test_race_part_results_show_download_csv_button(self) -> None:
+        html = self.render(
+            "race_part_results.html",
+            race=self.race,
+            race_part=self.part,
+            rows=[],
+            group_filters=[],
+            sex_filters=[],
+            parts=self.parts,
+            groups=[],
+            sexes=[],
+            user=None,
+        )
+
+        self.assertIn("Download CSV", html)
+        self.assertIn(
+            f'/race/{self.race.race_id}/part/{self.part.race_part_id}/results.csv',
+            html,
+        )
+
     def test_submit_start_defaults_to_open_live_timer(self) -> None:
         html = self.render(
             "submit_start.html",
@@ -175,6 +195,17 @@ class ActionCardVisibilityTests(unittest.TestCase):
         self.assertIn('option value="latest" selected', html)
         self.assertIn("Last Submitted", html)
         self.assertIn("syncStartEvents", html)
+
+    def test_wave_starts_uses_shared_digital_timer_markup(self) -> None:
+        html = self.render(
+            "wave_starts.html",
+            race=self.race,
+            race_part_id=self.part.race_part_id,
+            user={"role": "admin", "race_ids": [self.race.race_id]},
+        )
+
+        self.assertIn('id="wave-live-timer-panel"', html)
+        self.assertIn('class="digital-timer wave-live-timer"', html)
 
 
 if __name__ == "__main__":

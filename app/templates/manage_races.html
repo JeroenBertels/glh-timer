@@ -35,6 +35,7 @@
         <input type="file" name="file" accept=".csv" required class="file-input" onchange="this.form.submit()" />
       </label>
     </form>
+    <a class="button ghost" href="/manage/races/archive">Archived Races</a>
   </div>
 </div>
 <div class="card">
@@ -56,8 +57,8 @@
         <td>{{ race.race_timezone }}</td>
         <td class="actions">
           <a class="button ghost" href="/manage/races/{{ race.race_id }}/edit">Edit</a>
-          <form method="post" action="/manage/races/{{ race.race_id }}/delete">
-            <button class="danger" type="submit">Delete</button>
+          <form method="post" action="/manage/races/{{ race.race_id }}/archive">
+            <button type="submit">Archive</button>
           </form>
         </td>
       </tr>
