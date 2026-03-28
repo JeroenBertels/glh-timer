@@ -142,6 +142,21 @@ class ActionCardVisibilityTests(unittest.TestCase):
         self.assertIn("pending-end-caption", html)
         self.assertIn("row.append(meta, caption, controls);", html)
 
+    def test_submit_end_renders_pending_max_counter_summary(self) -> None:
+        html = self.render(
+            "submit_end.html",
+            race=self.race,
+            race_part_id=self.part.race_part_id,
+            pending_end_events=[],
+            start_events=[],
+            selected_event_id=None,
+            user={"role": "admin", "race_ids": [self.race.race_id]},
+        )
+
+        self.assertIn('id="pending-end-max-counter"', html)
+        self.assertIn("Rank: -", html)
+        self.assertIn("refreshPendingMaxCounter()", html)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -246,6 +246,31 @@ button.danger {
   gap: 10px;
 }
 
+.pending-end-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.pending-end-header h2 {
+  margin-bottom: 0;
+}
+
+.pending-end-summary {
+  display: inline-flex;
+  align-items: center;
+  min-height: 2rem;
+  padding: 0 10px;
+  border-radius: 999px;
+  background: var(--badge);
+  color: var(--ink);
+  font-size: 1rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
 .pending-end-item {
   border: 1px solid var(--border);
   border-radius: 10px;
