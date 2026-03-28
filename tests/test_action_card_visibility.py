@@ -196,6 +196,17 @@ class ActionCardVisibilityTests(unittest.TestCase):
         self.assertIn("Last Submitted", html)
         self.assertIn("syncStartEvents", html)
 
+    def test_wave_starts_uses_shared_digital_timer_markup(self) -> None:
+        html = self.render(
+            "wave_starts.html",
+            race=self.race,
+            race_part_id=self.part.race_part_id,
+            user={"role": "admin", "race_ids": [self.race.race_id]},
+        )
+
+        self.assertIn('id="wave-live-timer-panel"', html)
+        self.assertIn('class="digital-timer wave-live-timer"', html)
+
 
 if __name__ == "__main__":
     unittest.main()
