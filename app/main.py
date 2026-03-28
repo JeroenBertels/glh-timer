@@ -1802,6 +1802,65 @@ def race_part_results(
     )
 
 
+@app.get(
+    "/race/{race_id}/part/{race_part_id}/results.csv",
+    response_class=StreamingResponse,
+)
+def download_race_part_results_csv(
+    request: Request, race_id: str, race_part_id: str, db: Session = Depends(get_db)
+):
+    race = db.get(Race, race_id)
+    if not race:
+        raise HTTPException(status_code=404)
+    part = db.scalar(
+        select(RacePart).where(
+            RacePart.race_id == race_id, RacePart.race_part_id == race_part_id
+        )
+    )
+    if not part:
+        raise HTTPException(status_code=404)
+    rows = build_results(db, race, part, [], [])
+    parts = db.scalars(
+        select(RacePart)
+        .where(RacePart.race_id == race_id)
+        .order_by(RacePart.is_overall, RacePart.race_order)
+    ).all()
+
+    output = io.StringIO()
+    writer = csv.writer(output)
+    headers = ["position", "bib", "name", "group"]
+    if part.is_overall:
+        for part_option in parts:
+            if not part_option.is_overall:
+                headers.append(part_option.race_part_id)
+        headers.append("overall")
+    else:
+        headers.append("time")
+    writer.writerow(headers)
+
+    for row in rows:
+        values = [row["position"] or "", row["bib"], row["name"], row["group"]]
+        if part.is_overall:
+            for part_option in parts:
+                if not part_option.is_overall:
+                    values.append(row["parts"].get(part_option.race_part_id, ""))
+            values.append(row["duration"])
+        else:
+            values.append(row["duration"])
+        writer.writerow(values)
+
+    output.seek(0)
+    return StreamingResponse(
+        iter([output.getvalue()]),
+        media_type="text/csv",
+        headers={
+            "Content-Disposition": (
+                f"attachment; filename={race_id}-{race_part_id}-results.csv"
+            )
+        },
+    )
+
+
 @app.get("/race/{race_id}/part/{race_part_id}/timer", response_class=HTMLResponse)
 def show_timer_page(
     request: Request,
