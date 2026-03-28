@@ -8,7 +8,11 @@ from sqlalchemy.orm import Session
 os.environ.setdefault("DATABASE_URL", "sqlite:///:memory:")
 
 from app.db import Base
-from app.main import load_start_timer_events, selected_start_timer_event_id
+from app.main import (
+    START_TIMER_LAST_SUBMITTED,
+    load_start_timer_events,
+    selected_start_timer_choice,
+)
 from app.models import Race, TimingEvent
 
 
@@ -91,12 +95,22 @@ class TimerStartEventTests(unittest.TestCase):
             [event["start_label"] for event in start_events],
             ["09:05:00", "09:00:00", "08:30:00"],
         )
-        self.assertEqual(selected_start_timer_event_id(start_events), bib_start.id)
         self.assertEqual(
-            selected_start_timer_event_id(start_events, manual_start.id),
-            manual_start.id,
+            selected_start_timer_choice(start_events),
+            START_TIMER_LAST_SUBMITTED,
         )
-        self.assertEqual(selected_start_timer_event_id(start_events, 999999), bib_start.id)
+        self.assertEqual(
+            selected_start_timer_choice(start_events, str(manual_start.id)),
+            str(manual_start.id),
+        )
+        self.assertEqual(
+            selected_start_timer_choice(start_events, "999999"),
+            START_TIMER_LAST_SUBMITTED,
+        )
+        self.assertEqual(
+            selected_start_timer_choice(start_events, START_TIMER_LAST_SUBMITTED),
+            START_TIMER_LAST_SUBMITTED,
+        )
 
 
 if __name__ == "__main__":

@@ -35,7 +35,10 @@
   </form>
 </div>
 <div class="card">
-  <h2>Pending Bib or Group</h2>
+  <div class="pending-end-header">
+    <h2>Pending Bib or Group</h2>
+    <span id="pending-end-max-counter" class="pending-end-summary">Rank: -</span>
+  </div>
   <p class="small">
     End-time submissions without a bib/group appear here. Enter a bib, group, or comma-separated list (bib ranges like 5-7 allowed) and press OK.
   </p>
@@ -66,6 +69,7 @@
   const qrStatus = document.getElementById('qr-status');
   const pendingList = document.getElementById('pending-end-list');
   const pendingEmpty = document.getElementById('pending-end-empty');
+  const pendingMaxCounter = document.getElementById('pending-end-max-counter');
   const initialPendingEndEvents = {{ pending_end_events | tojson }};
   const pendingEndpoint = `${endForm.action}/pending`;
   let qrInstance = null;
@@ -76,6 +80,23 @@
 
   function refreshPendingEmptyState() {
     pendingEmpty.style.display = pendingList.children.length > 0 ? 'none' : 'block';
+  }
+
+  function refreshPendingMaxCounter() {
+    if (!pendingMaxCounter) {
+      return;
+    }
+    let maxCounter = null;
+    for (const row of pendingList.children) {
+      const value = Number.parseInt(row.dataset.pendingCounter || '', 10);
+      if (Number.isNaN(value)) {
+        continue;
+      }
+      maxCounter = maxCounter === null ? value : Math.max(maxCounter, value);
+    }
+    pendingMaxCounter.textContent = maxCounter === null
+      ? 'Rank: -'
+      : `Rank: ${maxCounter}`;
   }
 
   function timerIsVisible() {
@@ -161,6 +182,7 @@
       row.remove();
       pendingDurationLabels.delete(String(eventId));
       refreshPendingEmptyState();
+      refreshPendingMaxCounter();
       flashMessage(submitWithoutTargets ? 'Saved without bib/group' : 'Updated');
     } catch (error) {
       flashMessage('Update failed');
@@ -177,6 +199,9 @@
     const row = document.createElement('div');
     row.className = 'pending-end-item';
     row.dataset.eventId = item.id;
+    if (item.pending_counter !== null && item.pending_counter !== undefined) {
+      row.dataset.pendingCounter = String(item.pending_counter);
+    }
 
     const caption = document.createElement('p');
     caption.className = 'small pending-end-caption';
@@ -225,6 +250,7 @@
     row.append(meta, caption, controls);
     pendingList.append(row);
     refreshPendingEmptyState();
+    refreshPendingMaxCounter();
   }
 
   function capturePendingDrafts() {
@@ -282,6 +308,7 @@
     }
     restorePendingDrafts(drafts, focusedEventId);
     refreshPendingEmptyState();
+    refreshPendingMaxCounter();
   }
 
   async function syncPendingEvents() {
