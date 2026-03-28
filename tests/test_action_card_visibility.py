@@ -58,7 +58,21 @@ class ActionCardVisibilityTests(unittest.TestCase):
         )
 
         self.assertIn("Manage Race Parts", html)
+        self.assertNotIn("Download QR Codes", html)
         self.assertEqual(html.count('<div class="card">'), 2)
+
+    def test_manage_participants_shows_qr_codes_before_download_csv(self) -> None:
+        html = self.render(
+            "manage_participants.html",
+            race=self.race,
+            participants=[],
+            error=None,
+            user={"role": "admin", "race_ids": [self.race.race_id]},
+        )
+
+        self.assertIn("Download QR Codes", html)
+        self.assertIn("Download CSV", html)
+        self.assertLess(html.index("Download QR Codes"), html.index("Download CSV"))
 
     def test_race_part_results_hide_action_card_when_logged_out(self) -> None:
         html = self.render(

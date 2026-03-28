@@ -42,6 +42,7 @@
 </div>
 <div class="card">
   <div class="actions">
+    <a class="button ghost" href="/race/{{ race.race_id }}/qrcodes.zip">Download QR Codes</a>
     <a class="button ghost" href="/race/{{ race.race_id }}/manage/participants/csv">Download CSV</a>
     <form method="post" action="/race/{{ race.race_id }}/manage/participants/csv" enctype="multipart/form-data">
       <label class="button ghost file-button">
